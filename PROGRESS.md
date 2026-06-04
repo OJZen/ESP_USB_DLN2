@@ -17,6 +17,8 @@ USB GPIO device.
       can enable edge monitoring.
 - [x] M7: Expand the stable GPIO export while excluding occupied and high-risk
       ESP32-S3 pins.
+- [x] M8: Replace GPIO event polling with ESP GPIO interrupt driven event
+      queuing.
 
 ## Log
 
@@ -80,3 +82,8 @@ USB GPIO device.
   - `gpioset -c ... -t 100ms,0 17=1` succeeds and releases back to input.
   - `gpiomon -c ... -e both --debounce-period 10ms --idle-timeout 1s 17`
     successfully enables event monitoring on the new highest line.
+- Replaced the first GPIO event polling implementation with ESP GPIO ISR
+  handlers feeding a FreeRTOS queue. The USB event task now waits on queued
+  edge events and sends DLN-2 event packets from task context.
+- Rebuilt and flashed the ISR queue event firmware. Verified `gpioinfo`,
+  `gpioget`, `gpioset`, and `gpiomon` still work on the 18-line chip.

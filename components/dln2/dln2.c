@@ -63,9 +63,10 @@ size_t dln2_make_event(uint16_t id, uint16_t echo, const void *payload,
     return total_len;
 }
 
-bool dln2_next_event(uint8_t *event, size_t event_cap, size_t *event_len)
+bool dln2_next_event(uint8_t *event, size_t event_cap, size_t *event_len,
+                     uint32_t timeout_ms)
 {
-    return dln2_gpio_next_event(event, event_cap, event_len);
+    return dln2_gpio_next_event(event, event_cap, event_len, timeout_ms);
 }
 
 static size_t dln2_handle_ctrl(const dln2_request_t *request,

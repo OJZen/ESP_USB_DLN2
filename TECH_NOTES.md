@@ -158,7 +158,13 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   push-pull contention if the wrong two lines are configured as outputs. Prefer
   non-destructive host-side validation such as `gpioget`, `gpioset` on a single
   line, `gpioinfo`, and `gpiomon` event enable/idle-timeout checks.
-- The first event implementation polls input state every 10 ms instead of using
-  ESP GPIO interrupts. This keeps USB writes out of interrupt context and is
-  adequate for functional validation, but high-rate edge workloads should move
-  to an ISR-plus-queue design later.
+- GPIO events now use ESP GPIO interrupts plus a FreeRTOS queue. The ISR reads
+  the changed level and queues `{pin, value}` only; debounce filtering, DLN-2
+  event packet construction, and USB writes run later in task context.
+- `SET_EVENT_CFG` updates the ESP GPIO interrupt registration. Event type
+  `CHANGE` maps to `GPIO_INTR_ANYEDGE`; level-high/level-low DLN event types
+  are handled as rising/falling edge entry events to avoid continuous level IRQ
+  storms.
+- USB event writes must stay out of ISR context. The event task waits for queued
+  GPIO events and drains any immediately available events while the vendor IN
+  endpoint has room.

@@ -91,4 +91,5 @@ size_t dln2_make_event(uint16_t id, uint16_t echo, const void *payload,
 void dln2_gpio_init(void);
 size_t dln2_gpio_handle_request(const dln2_request_t *request,
                                 uint8_t *response, size_t response_cap);
-bool dln2_gpio_next_event(uint8_t *event, size_t event_cap, size_t *event_len);
+bool dln2_gpio_next_event(uint8_t *event, size_t event_cap, size_t *event_len,
+                          uint32_t timeout_ms);

@@ -5,6 +5,8 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 
 #define DLN2_GPIO_CMD(cmd) DLN2_CMD(cmd, DLN2_MODULE_GPIO)
 
@@ -32,6 +34,7 @@
 #define DLN2_GPIO_EVENT_CHANGE_RISING  0x11
 #define DLN2_GPIO_EVENT_CHANGE_FALLING 0x21
 #define DLN2_GPIO_EVENT_MASK           0x0f
+#define DLN2_GPIO_EVENT_QUEUE_LEN      32
 
 typedef struct {
     gpio_num_t gpio;
@@ -43,7 +46,13 @@ typedef struct {
     bool event_last_value;
     bool event_have_last_value;
     int64_t event_last_emit_us;
+    bool event_irq_attached;
 } dln2_gpio_line_t;
+
+typedef struct {
+    uint16_t pin;
+    bool value;
+} dln2_gpio_queued_event_t;
 
 static const gpio_num_t s_gpio_map[] = {
     GPIO_NUM_1,
@@ -70,7 +79,96 @@ static const gpio_num_t s_gpio_map[] = {
 
 static const char *TAG = "dln2_gpio";
 static dln2_gpio_line_t s_lines[DLN2_GPIO_COUNT];
+static QueueHandle_t s_event_queue;
 static uint32_t s_debounce_us;
+
+static void gpio_event_isr(void *arg)
+{
+    const uint16_t pin = (uintptr_t)arg;
+    const dln2_gpio_line_t *line = &s_lines[pin];
+    dln2_gpio_queued_event_t event = {
+        .pin = pin,
+        .value = gpio_get_level(line->gpio) != 0,
+    };
+    BaseType_t high_priority_woken = pdFALSE;
+
+    if (s_event_queue) {
+        xQueueSendFromISR(s_event_queue, &event, &high_priority_woken);
+    }
+
+    if (high_priority_woken) {
+        portYIELD_FROM_ISR();
+    }
+}
+
+static gpio_int_type_t event_to_intr_type(uint8_t type)
+{
+    switch (type) {
+    case DLN2_GPIO_EVENT_CHANGE:
+        return GPIO_INTR_ANYEDGE;
+    case DLN2_GPIO_EVENT_LVL_HIGH:
+        return GPIO_INTR_POSEDGE;
+    case DLN2_GPIO_EVENT_LVL_LOW:
+        return GPIO_INTR_NEGEDGE;
+    default:
+        return GPIO_INTR_DISABLE;
+    }
+}
+
+static void gpio_event_disable(dln2_gpio_line_t *line)
+{
+    if (line->event_irq_attached) {
+        gpio_intr_disable(line->gpio);
+        gpio_isr_handler_remove(line->gpio);
+        line->event_irq_attached = false;
+    }
+    gpio_set_intr_type(line->gpio, GPIO_INTR_DISABLE);
+}
+
+static esp_err_t gpio_event_update(uint16_t pin, dln2_gpio_line_t *line)
+{
+    gpio_int_type_t intr_type;
+    esp_err_t err;
+
+    gpio_event_disable(line);
+
+    if (!line->enabled || line->is_output ||
+        line->event_type == DLN2_GPIO_EVENT_NONE) {
+        return ESP_OK;
+    }
+
+    if (!s_event_queue) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    intr_type = event_to_intr_type(line->event_type);
+    if (intr_type == GPIO_INTR_DISABLE) {
+        return ESP_OK;
+    }
+
+    line->event_last_value = gpio_get_level(line->gpio) != 0;
+    line->event_have_last_value = true;
+
+    err = gpio_set_intr_type(line->gpio, intr_type);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = gpio_isr_handler_add(line->gpio, gpio_event_isr,
+                               (void *)(uintptr_t)pin);
+    if (err != ESP_OK) {
+        gpio_set_intr_type(line->gpio, GPIO_INTR_DISABLE);
+        return err;
+    }
+
+    line->event_irq_attached = true;
+    err = gpio_intr_enable(line->gpio);
+    if (err != ESP_OK) {
+        gpio_event_disable(line);
+    }
+
+    return err;
+}
 
 static bool get_line(uint16_t pin, dln2_gpio_line_t **line)
 {
@@ -152,7 +250,9 @@ static size_t gpio_pin_enable(const dln2_request_t *request, bool enable,
         line->enabled = true;
         line->is_output = false;
         line->out_value = false;
+        gpio_event_update(pin, line);
     } else {
+        gpio_event_disable(line);
         gpio_reset_pin(line->gpio);
         line->enabled = false;
         line->is_output = false;
@@ -270,6 +370,14 @@ static size_t dln2_gpio_set_direction(const dln2_request_t *request,
         gpio_set_level(line->gpio, line->out_value);
     }
 
+    err = gpio_event_update(pin, line);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "gpio_event_update GPIO%d failed: %s", line->gpio,
+                 esp_err_to_name(err));
+        return dln2_make_response(request, DLN2_RES_FAIL, NULL, 0, response,
+                                  response_cap);
+    }
+
     ESP_LOGI(TAG, "pin %u GPIO%d direction=%s", pin, line->gpio,
              line->is_output ? "out" : "in");
 
@@ -382,6 +490,14 @@ static size_t gpio_set_event_cfg(const dln2_request_t *request,
     line->event_have_last_value = normalized_type != DLN2_GPIO_EVENT_NONE;
     line->event_last_emit_us = 0;
 
+    esp_err_t err = gpio_event_update(pin, line);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "gpio_event_update GPIO%d failed: %s", line->gpio,
+                 esp_err_to_name(err));
+        return dln2_make_response(request, DLN2_RES_FAIL, NULL, 0, response,
+                                  response_cap);
+    }
+
     ESP_LOGI(TAG, "pin %u GPIO%d event type=%u period=%u", pin, line->gpio,
              line->event_type, line->event_period_ms);
 
@@ -417,6 +533,8 @@ static size_t gpio_get_event_cfg(const dln2_request_t *request,
 
 void dln2_gpio_init(void)
 {
+    esp_err_t err;
+
     memset(s_lines, 0, sizeof(s_lines));
 
     for (uint16_t i = 0; i < DLN2_GPIO_COUNT; i++) {
@@ -424,34 +542,61 @@ void dln2_gpio_init(void)
         gpio_reset_pin(s_lines[i].gpio);
     }
 
+    s_event_queue = xQueueCreate(DLN2_GPIO_EVENT_QUEUE_LEN,
+                                 sizeof(dln2_gpio_queued_event_t));
+    if (!s_event_queue) {
+        ESP_LOGE(TAG, "failed to create GPIO event queue");
+    }
+
+    err = gpio_install_isr_service(0);
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "gpio_install_isr_service failed: %s",
+                 esp_err_to_name(err));
+    }
+
     s_debounce_us = 0;
 
     ESP_LOGI(TAG, "initialized %u GPIO lines", DLN2_GPIO_COUNT);
 }
 
-bool dln2_gpio_next_event(uint8_t *event, size_t event_cap, size_t *event_len)
+bool dln2_gpio_next_event(uint8_t *event, size_t event_cap, size_t *event_len,
+                          uint32_t timeout_ms)
 {
+    dln2_gpio_queued_event_t queued;
+    TickType_t wait_ticks = pdMS_TO_TICKS(timeout_ms);
+
     if (!event || !event_len) {
         return false;
     }
 
     *event_len = 0;
 
-    for (uint16_t pin = 0; pin < DLN2_GPIO_COUNT; pin++) {
-        dln2_gpio_line_t *line = &s_lines[pin];
-        bool value;
+    if (!s_event_queue) {
+        return false;
+    }
+
+    while (xQueueReceive(s_event_queue, &queued, wait_ticks) == pdTRUE) {
+        uint16_t pin = queued.pin;
+        dln2_gpio_line_t *line;
+        bool value = queued.value;
         bool matched;
         uint8_t payload[6];
         int64_t now_us;
         size_t len;
 
+        wait_ticks = 0;
+
+        if (pin >= DLN2_GPIO_COUNT) {
+            continue;
+        }
+
+        line = &s_lines[pin];
         if (!line->enabled || line->is_output ||
             line->event_type == DLN2_GPIO_EVENT_NONE) {
             line->event_have_last_value = false;
             continue;
         }
 
-        value = gpio_get_level(line->gpio) != 0;
         if (!line->event_have_last_value) {
             line->event_last_value = value;
             line->event_have_last_value = true;

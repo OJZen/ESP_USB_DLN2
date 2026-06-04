@@ -15,7 +15,8 @@
 static const char *TAG = "esp_usb_dln2";
 
 #define DLN2_VENDOR_ITF 0
-#define DLN2_EVENT_POLL_MS 10
+#define DLN2_EVENT_WAIT_MS 50
+#define DLN2_EVENT_USB_BACKOFF_MS 1
 
 static uint8_t s_rx_buf[DLN2_MAX_PACKET_SIZE];
 static uint8_t s_tx_buf[DLN2_MAX_PACKET_SIZE];
@@ -47,23 +48,34 @@ static void dln2_event_task(void *arg)
     (void)arg;
 
     while (true) {
-        if (tud_mounted()) {
-            size_t event_len = 0;
+        size_t event_len = 0;
 
-            while (tud_vendor_n_write_available(DLN2_VENDOR_ITF) >= 14 &&
-                   dln2_next_event(event_buf, sizeof(event_buf), &event_len)) {
-                uint32_t written = dln2_vendor_write_packet(
-                    DLN2_VENDOR_ITF, event_buf, event_len);
-
-                if (written != event_len) {
-                    ESP_LOGW(TAG, "short event TX: wrote %u of %u",
-                             (unsigned)written, (unsigned)event_len);
-                    break;
-                }
-            }
+        if (!tud_mounted()) {
+            vTaskDelay(pdMS_TO_TICKS(DLN2_EVENT_WAIT_MS));
+            continue;
         }
 
-        vTaskDelay(pdMS_TO_TICKS(DLN2_EVENT_POLL_MS));
+        if (tud_vendor_n_write_available(DLN2_VENDOR_ITF) < 14) {
+            vTaskDelay(pdMS_TO_TICKS(DLN2_EVENT_USB_BACKOFF_MS));
+            continue;
+        }
+
+        if (!dln2_next_event(event_buf, sizeof(event_buf), &event_len,
+                             DLN2_EVENT_WAIT_MS)) {
+            continue;
+        }
+
+        do {
+            uint32_t written = dln2_vendor_write_packet(DLN2_VENDOR_ITF,
+                                                        event_buf, event_len);
+
+            if (written != event_len) {
+                ESP_LOGW(TAG, "short event TX: wrote %u of %u",
+                         (unsigned)written, (unsigned)event_len);
+                break;
+            }
+        } while (tud_vendor_n_write_available(DLN2_VENDOR_ITF) >= 14 &&
+                 dln2_next_event(event_buf, sizeof(event_buf), &event_len, 0));
     }
 }
 
