@@ -2,11 +2,13 @@
 set -euo pipefail
 
 DEFAULT_CHIP="/dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00"
+DEFAULT_LINE_MAP="0:1 1:2 2:4 3:5 4:6 5:7 6:8 7:9"
 
 CHIP="${CHIP:-$DEFAULT_CHIP}"
 HIGH_SECONDS="${HIGH_SECONDS:-3}"
 LOW_SECONDS="${LOW_SECONDS:-3}"
 LINES_ENV="${LINES:-}"
+LINE_MAP="${LINE_MAP:-$DEFAULT_LINE_MAP}"
 
 if [[ $# -gt 0 ]]; then
     CHIP="$1"
@@ -26,7 +28,7 @@ if [[ ! -e "$CHIP" ]]; then
     exit 1
 fi
 
-exec python3 - "$CHIP" "$HIGH_SECONDS" "$LOW_SECONDS" "${LINES[@]}" <<'PY'
+exec python3 - "$CHIP" "$HIGH_SECONDS" "$LOW_SECONDS" "$LINE_MAP" "${LINES[@]}" <<'PY'
 import re
 import signal
 import sys
@@ -73,10 +75,26 @@ def stop_handler(signum, frame) -> None:
 
 signal.signal(signal.SIGTERM, stop_handler)
 
+def parse_line_map(raw: str) -> dict[int, int]:
+    mapping = {}
+    for item in raw.split():
+        line, gpio = item.split(":", 1)
+        mapping[int(line)] = int(gpio)
+    return mapping
+
+
+def format_lines(lines: list[int], line_map: dict[int, int]) -> str:
+    return ", ".join(
+        f"{line}(GPIO{line_map[line]})" if line in line_map else str(line)
+        for line in lines
+    )
+
+
 chip = sys.argv[1]
 high_period = parse_period(sys.argv[2])
 low_period = parse_period(sys.argv[3])
-lines = [int(arg) for arg in sys.argv[4:]]
+line_map = parse_line_map(sys.argv[4])
+lines = [int(arg) for arg in sys.argv[5:]]
 
 if not lines:
     raise SystemExit("no GPIO lines selected")
@@ -91,6 +109,10 @@ low_values = {line: Value.INACTIVE for line in lines}
 
 print(f"Using chip: {chip}", flush=True)
 print(f"Lines: {' '.join(str(line) for line in lines)}", flush=True)
+print(
+    "Map: " + ", ".join(f"line {line}->GPIO{gpio}" for line, gpio in sorted(line_map.items())),
+    flush=True,
+)
 print(f"High: {sys.argv[2]}, low: {sys.argv[3]}", flush=True)
 print("All selected lines are toggled together. Press Ctrl-C to stop.", flush=True)
 
@@ -102,13 +124,13 @@ with gpiod.request_lines(
     try:
         while True:
             request.set_values(high_values)
-            log(f"SET HIGH lines {lines} for {sys.argv[2]}")
+            log(f"SET HIGH {format_lines(lines, line_map)} for {sys.argv[2]}")
             time.sleep(high_period)
 
             request.set_values(low_values)
-            log(f"SET LOW  lines {lines} for {sys.argv[3]}")
+            log(f"SET LOW  {format_lines(lines, line_map)} for {sys.argv[3]}")
             time.sleep(low_period)
     except KeyboardInterrupt:
         request.set_values(low_values)
-        log(f"STOP requested; SET LOW lines {lines} before release")
+        log(f"STOP requested; SET LOW {format_lines(lines, line_map)} before release")
 PY

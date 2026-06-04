@@ -107,3 +107,11 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   `gpioset -t` so it can print one log line after every set-high and set-low
   operation. On Ctrl-C or SIGTERM it attempts to set all selected lines low
   before releasing the request.
+- Linux GPIO line offsets are DLN-2 line numbers, not ESP32-S3 GPIO numbers.
+  In the current firmware, line 0 maps to ESP32 GPIO1 and line 7 maps to ESP32
+  GPIO9. This is why probing board pads GPIO8/GPIO9 toggles during the
+  `0..7` line test, while board pads GPIO0/GPIO3 do not.
+- On the WeAct ESP32S3-A schematic, GPIO0 is tied to `KEY@BOOT` and the
+  auto-download circuit path. GPIO0 and GPIO3 are also ESP32-S3 strapping pins,
+  so keeping them out of the first stable GPIO export avoids boot-mode and
+  reset-time surprises.

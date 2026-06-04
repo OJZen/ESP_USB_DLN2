@@ -51,3 +51,4 @@ USB GPIO device.
 - Added `scripts/gpio_pin_walk.sh` for meter probing. It now toggles all
   selected lines together, logs every high/low transition, and drives them low
   before release when stopped.
+- Added line-to-ESP32-GPIO mapping labels to the meter probing script logs.
