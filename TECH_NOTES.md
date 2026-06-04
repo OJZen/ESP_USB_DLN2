@@ -35,6 +35,13 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - GPIO pin/value responses are `u16 pin` plus optional `u8 value`; set
   commands can respond with only the `u16 pin` because Linux transmit-only
   helpers ignore response payload.
+- Linux `gpio-dln2` registers a callback for `DLN2_GPIO_CONDITION_MET_EV`.
+  Event packets use `handle = 0` and do not include a response `result` field;
+  the payload consumed by `gpio-dln2` is `u16 count`, `u8 type`, `u16 pin`,
+  and `u8 value`.
+- Linux maps rising/falling edge IRQ types to device-side `CHANGE` events when
+  calling `SET_EVENT_CFG`; it then filters rising/falling in the host callback
+  by checking the event value.
 
 ## Implemented USB Shape
 
@@ -76,6 +83,7 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   - `gpioget -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 --numeric 0`
   - `gpioget -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 --numeric 0 1 2 3 4 5 6 7`
   - `gpioset -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -t 100ms,0 0=1`
+  - `gpiomon -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -e both --debounce-period 10ms --idle-timeout 1s 0`
 - The kernel also autoloads I2C, SPI, and ADC DLN-2 subdrivers. The firmware
   currently returns `DLN2_RES_NOT_IMPLEMENTED` for those valid but unsupported
   handles.
@@ -115,3 +123,11 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   auto-download circuit path. GPIO0 and GPIO3 are also ESP32-S3 strapping pins,
   so keeping them out of the first stable GPIO export avoids boot-mode and
   reset-time surprises.
+- Avoid jumper loopback tests as a routine validation path. They can create
+  push-pull contention if the wrong two lines are configured as outputs. Prefer
+  non-destructive host-side validation such as `gpioget`, `gpioset` on a single
+  line, `gpioinfo`, and `gpiomon` event enable/idle-timeout checks.
+- The first event implementation polls input state every 10 ms instead of using
+  ESP GPIO interrupts. This keeps USB writes out of interrupt context and is
+  adequate for functional validation, but high-rate edge workloads should move
+  to an ISR-plus-queue design later.

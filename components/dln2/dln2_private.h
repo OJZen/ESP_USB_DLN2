@@ -85,7 +85,10 @@ static inline void dln2_put_le32(void *ptr, uint32_t value)
 size_t dln2_make_response(const dln2_request_t *request, uint16_t result,
                           const void *payload, size_t payload_len,
                           uint8_t *response, size_t response_cap);
+size_t dln2_make_event(uint16_t id, uint16_t echo, const void *payload,
+                       size_t payload_len, uint8_t *event, size_t event_cap);
 
 void dln2_gpio_init(void);
 size_t dln2_gpio_handle_request(const dln2_request_t *request,
                                 uint8_t *response, size_t response_cap);
+bool dln2_gpio_next_event(uint8_t *event, size_t event_cap, size_t *event_len);

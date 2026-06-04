@@ -39,6 +39,35 @@ size_t dln2_make_response(const dln2_request_t *request, uint16_t result,
     return total_len;
 }
 
+size_t dln2_make_event(uint16_t id, uint16_t echo, const void *payload,
+                       size_t payload_len, uint8_t *event, size_t event_cap)
+{
+    const size_t total_len = sizeof(dln2_header_t) + payload_len;
+
+    if (!event || total_len > event_cap) {
+        return 0;
+    }
+
+    dln2_put_le16(event + 0, (uint16_t)total_len);
+    dln2_put_le16(event + 2, id);
+    dln2_put_le16(event + 4, echo);
+    dln2_put_le16(event + 6, DLN2_HANDLE_EVENT);
+
+    if (payload_len && payload) {
+        memcpy(event + sizeof(dln2_header_t), payload, payload_len);
+    }
+
+    ESP_LOGD(TAG, "EVENT id=0x%04x echo=%u payload=%u", id, echo,
+             (unsigned)payload_len);
+
+    return total_len;
+}
+
+bool dln2_next_event(uint8_t *event, size_t event_cap, size_t *event_len)
+{
+    return dln2_gpio_next_event(event, event_cap, event_len);
+}
+
 static size_t dln2_handle_ctrl(const dln2_request_t *request,
                                uint8_t *response, size_t response_cap)
 {

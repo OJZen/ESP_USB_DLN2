@@ -4,6 +4,9 @@
 #include "dln2.h"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "freertos/task.h"
 #include "tinyusb.h"
 #include "tinyusb_default_config.h"
 #include "tusb.h"
@@ -11,8 +14,58 @@
 
 static const char *TAG = "esp_usb_dln2";
 
+#define DLN2_VENDOR_ITF 0
+#define DLN2_EVENT_POLL_MS 10
+
 static uint8_t s_rx_buf[DLN2_MAX_PACKET_SIZE];
 static uint8_t s_tx_buf[DLN2_MAX_PACKET_SIZE];
+static SemaphoreHandle_t s_vendor_tx_lock;
+
+static uint32_t dln2_vendor_write_packet(uint8_t itf, const uint8_t *packet,
+                                         size_t packet_len)
+{
+    uint32_t written;
+
+    if (s_vendor_tx_lock) {
+        xSemaphoreTake(s_vendor_tx_lock, portMAX_DELAY);
+    }
+
+    written = tud_vendor_n_write(itf, packet, packet_len);
+    tud_vendor_n_write_flush(itf);
+
+    if (s_vendor_tx_lock) {
+        xSemaphoreGive(s_vendor_tx_lock);
+    }
+
+    return written;
+}
+
+static void dln2_event_task(void *arg)
+{
+    uint8_t event_buf[DLN2_MAX_PACKET_SIZE];
+
+    (void)arg;
+
+    while (true) {
+        if (tud_mounted()) {
+            size_t event_len = 0;
+
+            while (tud_vendor_n_write_available(DLN2_VENDOR_ITF) >= 14 &&
+                   dln2_next_event(event_buf, sizeof(event_buf), &event_len)) {
+                uint32_t written = dln2_vendor_write_packet(
+                    DLN2_VENDOR_ITF, event_buf, event_len);
+
+                if (written != event_len) {
+                    ESP_LOGW(TAG, "short event TX: wrote %u of %u",
+                             (unsigned)written, (unsigned)event_len);
+                    break;
+                }
+            }
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(DLN2_EVENT_POLL_MS));
+    }
+}
 
 void tud_vendor_rx_cb(uint8_t itf, uint8_t const *buffer, uint16_t bufsize)
 {
@@ -38,8 +91,7 @@ void tud_vendor_rx_cb(uint8_t itf, uint8_t const *buffer, uint16_t bufsize)
         return;
     }
 
-    uint32_t written = tud_vendor_n_write(itf, s_tx_buf, response_len);
-    tud_vendor_n_write_flush(itf);
+    uint32_t written = dln2_vendor_write_packet(itf, s_tx_buf, response_len);
 
     if (written != response_len) {
         ESP_LOGW(TAG, "short vendor TX: wrote %u of %u",
@@ -60,6 +112,12 @@ void app_main(void)
 {
     ESP_LOGI(TAG, "starting ESP32-S3 DLN-2 USB GPIO device");
 
+    s_vendor_tx_lock = xSemaphoreCreateMutex();
+    if (!s_vendor_tx_lock) {
+        ESP_LOGE(TAG, "failed to create vendor TX mutex");
+        return;
+    }
+
     dln2_init();
 
     tinyusb_config_t tusb_cfg = TINYUSB_DEFAULT_CONFIG();
@@ -69,6 +127,8 @@ void app_main(void)
     tusb_cfg.descriptor.full_speed_config = dln2_fs_configuration_descriptor;
 
     ESP_ERROR_CHECK(tinyusb_driver_install(&tusb_cfg));
+
+    xTaskCreate(dln2_event_task, "dln2_event", 4096, NULL, 5, NULL);
 
     ESP_LOGI(TAG, "TinyUSB installed; waiting for Linux dln2 driver");
 }

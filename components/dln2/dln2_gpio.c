@@ -4,6 +4,7 @@
 
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 
 #define DLN2_GPIO_CMD(cmd) DLN2_CMD(cmd, DLN2_MODULE_GPIO)
 
@@ -13,6 +14,7 @@
 #define DLN2_GPIO_PIN_GET_VAL         DLN2_GPIO_CMD(0x0b)
 #define DLN2_GPIO_PIN_SET_OUT_VAL     DLN2_GPIO_CMD(0x0c)
 #define DLN2_GPIO_PIN_GET_OUT_VAL     DLN2_GPIO_CMD(0x0d)
+#define DLN2_GPIO_CONDITION_MET_EV    DLN2_GPIO_CMD(0x0f)
 #define DLN2_GPIO_PIN_ENABLE          DLN2_GPIO_CMD(0x10)
 #define DLN2_GPIO_PIN_DISABLE         DLN2_GPIO_CMD(0x11)
 #define DLN2_GPIO_PIN_SET_DIRECTION   DLN2_GPIO_CMD(0x13)
@@ -23,11 +25,24 @@
 #define DLN2_GPIO_DIRECTION_IN  0
 #define DLN2_GPIO_DIRECTION_OUT 1
 
+#define DLN2_GPIO_EVENT_NONE           0
+#define DLN2_GPIO_EVENT_CHANGE         1
+#define DLN2_GPIO_EVENT_LVL_HIGH       2
+#define DLN2_GPIO_EVENT_LVL_LOW        3
+#define DLN2_GPIO_EVENT_CHANGE_RISING  0x11
+#define DLN2_GPIO_EVENT_CHANGE_FALLING 0x21
+#define DLN2_GPIO_EVENT_MASK           0x0f
+
 typedef struct {
     gpio_num_t gpio;
     bool enabled;
     bool is_output;
     bool out_value;
+    uint8_t event_type;
+    uint16_t event_period_ms;
+    bool event_last_value;
+    bool event_have_last_value;
+    int64_t event_last_emit_us;
 } dln2_gpio_line_t;
 
 static const gpio_num_t s_gpio_map[] = {
@@ -45,6 +60,7 @@ static const gpio_num_t s_gpio_map[] = {
 
 static const char *TAG = "dln2_gpio";
 static dln2_gpio_line_t s_lines[DLN2_GPIO_COUNT];
+static uint32_t s_debounce_us;
 
 static bool get_line(uint16_t pin, dln2_gpio_line_t **line)
 {
@@ -131,6 +147,10 @@ static size_t gpio_pin_enable(const dln2_request_t *request, bool enable,
         line->enabled = false;
         line->is_output = false;
         line->out_value = false;
+        line->event_type = DLN2_GPIO_EVENT_NONE;
+        line->event_period_ms = 0;
+        line->event_have_last_value = false;
+        line->event_last_emit_us = 0;
     }
 
     ESP_LOGI(TAG, "pin %u GPIO%d %s", pin, line->gpio,
@@ -286,6 +306,105 @@ static size_t gpio_port_get_value(const dln2_request_t *request,
                               sizeof(payload), response, response_cap);
 }
 
+static uint8_t normalize_event_type(uint8_t type)
+{
+    switch (type) {
+    case DLN2_GPIO_EVENT_NONE:
+    case DLN2_GPIO_EVENT_CHANGE:
+    case DLN2_GPIO_EVENT_LVL_HIGH:
+    case DLN2_GPIO_EVENT_LVL_LOW:
+        return type;
+    case DLN2_GPIO_EVENT_CHANGE_RISING:
+    case DLN2_GPIO_EVENT_CHANGE_FALLING:
+        return type & DLN2_GPIO_EVENT_MASK;
+    default:
+        return 0xff;
+    }
+}
+
+static size_t gpio_set_debounce(const dln2_request_t *request,
+                                uint8_t *response, size_t response_cap)
+{
+    if (request->payload_len != sizeof(uint32_t)) {
+        return dln2_make_response(request, DLN2_RES_INVALID_COMMAND_SIZE,
+                                  NULL, 0, response, response_cap);
+    }
+
+    s_debounce_us = dln2_get_le32(request->payload);
+    ESP_LOGI(TAG, "debounce=%u us", (unsigned)s_debounce_us);
+
+    return dln2_make_response(request, DLN2_RES_SUCCESS, NULL, 0, response,
+                              response_cap);
+}
+
+static size_t gpio_set_event_cfg(const dln2_request_t *request,
+                                 uint8_t *response, size_t response_cap)
+{
+    dln2_gpio_line_t *line;
+    uint16_t pin;
+    uint8_t type;
+    uint8_t normalized_type;
+    uint16_t period_ms;
+
+    if (request->payload_len != 5) {
+        return dln2_make_response(request, DLN2_RES_INVALID_COMMAND_SIZE,
+                                  NULL, 0, response, response_cap);
+    }
+
+    pin = dln2_get_le16(request->payload);
+    if (!get_line(pin, &line)) {
+        return dln2_make_response(request, DLN2_RES_INVALID_PIN_NUMBER,
+                                  NULL, 0, response, response_cap);
+    }
+
+    type = request->payload[2];
+    normalized_type = normalize_event_type(type);
+    if (normalized_type == 0xff) {
+        return dln2_make_response(request, DLN2_RES_INVALID_VALUE, NULL, 0,
+                                  response, response_cap);
+    }
+
+    period_ms = dln2_get_le16(request->payload + 3);
+
+    line->event_type = normalized_type;
+    line->event_period_ms = period_ms;
+    line->event_last_value = gpio_get_level(line->gpio) != 0;
+    line->event_have_last_value = normalized_type != DLN2_GPIO_EVENT_NONE;
+    line->event_last_emit_us = 0;
+
+    ESP_LOGI(TAG, "pin %u GPIO%d event type=%u period=%u", pin, line->gpio,
+             line->event_type, line->event_period_ms);
+
+    return dln2_make_response(request, DLN2_RES_SUCCESS, NULL, 0, response,
+                              response_cap);
+}
+
+static size_t gpio_get_event_cfg(const dln2_request_t *request,
+                                 uint8_t *response, size_t response_cap)
+{
+    dln2_gpio_line_t *line;
+    uint16_t pin;
+    uint8_t payload[5];
+
+    if (request->payload_len != sizeof(uint16_t)) {
+        return dln2_make_response(request, DLN2_RES_INVALID_COMMAND_SIZE,
+                                  NULL, 0, response, response_cap);
+    }
+
+    pin = dln2_get_le16(request->payload);
+    if (!get_line(pin, &line)) {
+        return dln2_make_response(request, DLN2_RES_INVALID_PIN_NUMBER,
+                                  NULL, 0, response, response_cap);
+    }
+
+    dln2_put_le16(payload, pin);
+    payload[2] = line->event_type;
+    dln2_put_le16(payload + 3, line->event_period_ms);
+
+    return dln2_make_response(request, DLN2_RES_SUCCESS, payload,
+                              sizeof(payload), response, response_cap);
+}
+
 void dln2_gpio_init(void)
 {
     memset(s_lines, 0, sizeof(s_lines));
@@ -295,7 +414,89 @@ void dln2_gpio_init(void)
         gpio_reset_pin(s_lines[i].gpio);
     }
 
+    s_debounce_us = 0;
+
     ESP_LOGI(TAG, "initialized %u GPIO lines", DLN2_GPIO_COUNT);
+}
+
+bool dln2_gpio_next_event(uint8_t *event, size_t event_cap, size_t *event_len)
+{
+    if (!event || !event_len) {
+        return false;
+    }
+
+    *event_len = 0;
+
+    for (uint16_t pin = 0; pin < DLN2_GPIO_COUNT; pin++) {
+        dln2_gpio_line_t *line = &s_lines[pin];
+        bool value;
+        bool matched;
+        uint8_t payload[6];
+        int64_t now_us;
+        size_t len;
+
+        if (!line->enabled || line->is_output ||
+            line->event_type == DLN2_GPIO_EVENT_NONE) {
+            line->event_have_last_value = false;
+            continue;
+        }
+
+        value = gpio_get_level(line->gpio) != 0;
+        if (!line->event_have_last_value) {
+            line->event_last_value = value;
+            line->event_have_last_value = true;
+            continue;
+        }
+
+        if (value == line->event_last_value) {
+            continue;
+        }
+        line->event_last_value = value;
+
+        switch (line->event_type) {
+        case DLN2_GPIO_EVENT_CHANGE:
+            matched = true;
+            break;
+        case DLN2_GPIO_EVENT_LVL_HIGH:
+            matched = value;
+            break;
+        case DLN2_GPIO_EVENT_LVL_LOW:
+            matched = !value;
+            break;
+        default:
+            matched = false;
+            break;
+        }
+
+        if (!matched) {
+            continue;
+        }
+
+        now_us = esp_timer_get_time();
+        if (s_debounce_us > 0 && line->event_last_emit_us > 0 &&
+            now_us - line->event_last_emit_us < s_debounce_us) {
+            continue;
+        }
+        line->event_last_emit_us = now_us;
+
+        dln2_put_le16(payload, 1);
+        payload[2] = line->event_type;
+        dln2_put_le16(payload + 3, pin);
+        payload[5] = value ? 1 : 0;
+
+        len = dln2_make_event(DLN2_GPIO_CONDITION_MET_EV, 0, payload,
+                              sizeof(payload), event, event_cap);
+        if (len == 0) {
+            return false;
+        }
+
+        *event_len = len;
+        ESP_LOGI(TAG, "pin %u GPIO%d event value=%u", pin, line->gpio,
+                 value ? 1 : 0);
+        return true;
+    }
+
+    return false;
 }
 
 size_t dln2_gpio_handle_request(const dln2_request_t *request,
@@ -338,8 +539,14 @@ size_t dln2_gpio_handle_request(const dln2_request_t *request,
         return gpio_port_get_value(request, response, response_cap);
 
     case DLN2_GPIO_SET_DEBOUNCE:
+        return gpio_set_debounce(request, response, response_cap);
+
     case DLN2_GPIO_PIN_SET_EVENT_CFG:
+        return gpio_set_event_cfg(request, response, response_cap);
+
     case DLN2_GPIO_PIN_GET_EVENT_CFG:
+        return gpio_get_event_cfg(request, response, response_cap);
+
     default:
         ESP_LOGW(TAG, "unsupported GPIO id=0x%04x", request->id);
         return dln2_make_response(request, DLN2_RES_NOT_IMPLEMENTED,

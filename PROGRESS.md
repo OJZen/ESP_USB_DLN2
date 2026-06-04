@@ -13,6 +13,8 @@ USB GPIO device.
 - [x] M4: Implement GPIO-only command subset and ESP32-S3 pin mapping.
 - [x] M5: Build, flash to `/dev/ttyACM1`, and verify Linux creates
       `/dev/gpiochipX`.
+- [x] M6: Implement DLN-2 GPIO event configuration and verify Linux `gpiomon`
+      can enable edge monitoring.
 
 ## Log
 
@@ -52,3 +54,15 @@ USB GPIO device.
   selected lines together, logs every high/low transition, and drives them low
   before release when stopped.
 - Added line-to-ESP32-GPIO mapping labels to the meter probing script logs.
+- Implemented GPIO event support for Linux `gpio-dln2`:
+  `SET_EVENT_CFG`, `GET_EVENT_CFG`, event packet generation on handle 0, and
+  debounce minimum event interval handling.
+- Added a FreeRTOS event polling task that sends `DLN2_GPIO_CONDITION_MET_EV`
+  packets over the vendor bulk IN endpoint without using GPIO loopback wiring.
+- Rebuilt and flashed the updated firmware to `/dev/ttyACM1`.
+- Verified after flashing:
+  - `lsusb -d a257:2013` reports `Diolan DLN-2 USB GPIO`.
+  - `gpiodetect` reports `gpiochip2 [dln2] (8 lines)`.
+  - `gpioget -c ... --numeric 0 1 2 3 4 5 6 7` succeeds.
+  - `gpiomon -c ... -e both --debounce-period 10ms --idle-timeout 1s 0`
+    successfully enables edge monitoring and exits cleanly.
