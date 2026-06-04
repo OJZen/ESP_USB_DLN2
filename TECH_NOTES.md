@@ -95,6 +95,36 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   the board, but they live in the high-numbered alternate-function group and
   need separate hardware validation before export.
 
+## ESP32-C3 Closed-Loop Probe
+
+- `c3_test` is an ESP32-C3 firmware project used as an external GPIO probe for
+  the ESP32-S3 DLN-2 GPIO device.
+- Default C3 probe channels:
+  - channel 0: C3 GPIO0
+  - channel 1: C3 GPIO1
+  - channel 2: C3 GPIO3
+  - channel 3: C3 GPIO4
+  - channel 4: C3 GPIO5
+  - channel 5: C3 GPIO6
+  - channel 6: C3 GPIO7
+  - channel 7: C3 GPIO10
+- These C3 pins avoid common ESP32-C3 strapping pins GPIO2/GPIO8/GPIO9, native
+  USB pins GPIO18/GPIO19, UART0 pins GPIO20/GPIO21, and flash pins.
+- Each C3-to-S3 signal must use a series resistor, preferably 1 kOhm to
+  4.7 kOhm. This limits current if a test bug ever configures both sides as
+  opposing push-pull outputs.
+- The first C3 probe mapping covers S3 DLN lines 0-7, which correspond to S3
+  GPIO1, GPIO2, GPIO4, GPIO5, GPIO6, GPIO7, GPIO8, and GPIO9.
+- The C3 firmware defaults all probe channels to input with pulldown enabled.
+  The host script only asks C3 to drive lines during the C3-output and pulse
+  portions of the test, and resets C3 channels back to input afterward.
+- The C3 host script waits after opening the serial port and retries `PING`
+  synchronization. This handles C3 boards whose USB-UART auto-reset circuit
+  toggles reset when the serial device is opened.
+- The first closed-loop pass should use S3 DLN lines 0-7. The same C3 probe can
+  cover S3 lines 8-17 later by moving the eight resistor-protected wires and
+  passing the selected line offsets with `--lines`.
+
 ## Verification Notes
 
 - The host automatically bound the mainline `dln2` driver with VID/PID
@@ -158,6 +188,10 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   push-pull contention if the wrong two lines are configured as outputs. Prefer
   non-destructive host-side validation such as `gpioget`, `gpioset` on a single
   line, `gpioinfo`, and `gpiomon` event enable/idle-timeout checks.
+- For stronger validation, use the ESP32-C3 probe with per-line series
+  resistors instead of direct jumper loopbacks. This provides a controllable
+  external input/output source while keeping accidental contention current
+  limited.
 - GPIO events now use ESP GPIO interrupts plus a FreeRTOS queue. The ISR reads
   the changed level and queues `{pin, value}` only; debounce filtering, DLN-2
   event packet construction, and USB writes run later in task context.

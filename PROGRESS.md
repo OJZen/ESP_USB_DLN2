@@ -19,6 +19,8 @@ USB GPIO device.
       ESP32-S3 pins.
 - [x] M8: Replace GPIO event polling with ESP GPIO interrupt driven event
       queuing.
+- [x] M9: Add an ESP32-C3 based external GPIO probe firmware and host
+      closed-loop test harness.
 
 ## Log
 
@@ -87,3 +89,12 @@ USB GPIO device.
   edge events and sends DLN-2 event packets from task context.
 - Rebuilt and flashed the ISR queue event firmware. Verified `gpioinfo`,
   `gpioget`, `gpioset`, and `gpiomon` still work on the 18-line chip.
+- Added `c3_test`, an ESP32-C3 firmware project that exposes 8 serial-controlled
+  GPIO probe channels. The default C3 channel GPIOs are GPIO0, GPIO1, GPIO3,
+  GPIO4, GPIO5, GPIO6, GPIO7, and GPIO10.
+- Added `scripts/c3_closed_loop_test.py` to coordinate C3 serial commands with
+  S3 libgpiod operations. It tests S3-output-to-C3-input,
+  C3-output-to-S3-input, and C3-pulse-to-S3-`gpiomon` event paths.
+- Added startup synchronization retries to the C3 host script so it tolerates
+  boards that reset when the serial port is opened.
+- Built `c3_test` successfully for target `esp32c3`.
