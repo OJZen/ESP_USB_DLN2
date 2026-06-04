@@ -48,3 +48,6 @@ USB GPIO device.
     reports 8 unnamed input lines.
   - `gpioget -c ... --numeric 0 1 2 3 4 5 6 7` succeeds.
   - `gpioset -c ... -t 100ms,0 0=1` succeeds and exits.
+- Added `scripts/gpio_pin_walk.sh` for meter probing. It now toggles all
+  selected lines together, logs every high/low transition, and drives them low
+  before release when stopped.

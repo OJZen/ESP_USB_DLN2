@@ -103,3 +103,7 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   output with no consumer. The Linux `gpio-dln2` driver caches direction and
   does not clear its `output_enabled` bitmap in the free path. A subsequent
   input request, such as `gpioget`, refreshes it.
+- `scripts/gpio_pin_walk.sh` uses the Python `gpiod` binding instead of
+  `gpioset -t` so it can print one log line after every set-high and set-low
+  operation. On Ctrl-C or SIGTERM it attempts to set all selected lines low
+  before releasing the request.

@@ -21,42 +21,94 @@ else
     LINES=(0 1 2 3 4 5 6 7)
 fi
 
-require_cmd() {
-    if ! command -v "$1" >/dev/null 2>&1; then
-        echo "missing required command: $1" >&2
-        exit 1
-    fi
-}
-
-format_period() {
-    local period="$1"
-
-    if [[ "$period" =~ [[:alpha:]] ]]; then
-        printf '%s\n' "$period"
-    else
-        printf '%ss\n' "$period"
-    fi
-}
-
-require_cmd gpioset
-
 if [[ ! -e "$CHIP" ]]; then
     echo "GPIO chip not found: $CHIP" >&2
     exit 1
 fi
 
-echo "Using chip: $CHIP"
-echo "Lines: ${LINES[*]}"
-high_period="$(format_period "$HIGH_SECONDS")"
-low_period="$(format_period "$LOW_SECONDS")"
+exec python3 - "$CHIP" "$HIGH_SECONDS" "$LOW_SECONDS" "${LINES[@]}" <<'PY'
+import re
+import signal
+import sys
+import time
 
-echo "High: $high_period, low: $low_period"
-echo "All selected lines start high, then toggle together forever."
-echo "Press Ctrl-C to stop."
+try:
+    import gpiod
+    from gpiod.line import Direction, Value
+except Exception as exc:
+    raise SystemExit(f"python-gpiod is required: {exc}")
 
-args=()
-for line in "${LINES[@]}"; do
-    args+=("${line}=1")
-done
 
-exec gpioset -c "$CHIP" -t "$high_period,$low_period" "${args[@]}"
+def parse_period(raw: str) -> float:
+    match = re.fullmatch(r"\s*([0-9]+(?:\.[0-9]+)?)([a-zA-Z]*)\s*", raw)
+    if not match:
+        raise SystemExit(f"invalid period: {raw!r}")
+
+    value = float(match.group(1))
+    unit = match.group(2) or "s"
+
+    if unit == "s":
+        return value
+    if unit == "ms":
+        return value / 1000.0
+    if unit == "us":
+        return value / 1_000_000.0
+    if unit == "m":
+        return value * 60.0
+
+    raise SystemExit(f"unsupported period unit: {unit!r}")
+
+
+def timestamp() -> str:
+    return time.strftime("%H:%M:%S")
+
+
+def log(message: str) -> None:
+    print(f"{timestamp()} {message}", flush=True)
+
+
+def stop_handler(signum, frame) -> None:
+    raise KeyboardInterrupt
+
+
+signal.signal(signal.SIGTERM, stop_handler)
+
+chip = sys.argv[1]
+high_period = parse_period(sys.argv[2])
+low_period = parse_period(sys.argv[3])
+lines = [int(arg) for arg in sys.argv[4:]]
+
+if not lines:
+    raise SystemExit("no GPIO lines selected")
+
+settings = gpiod.LineSettings(
+    direction=Direction.OUTPUT,
+    output_value=Value.INACTIVE,
+)
+
+high_values = {line: Value.ACTIVE for line in lines}
+low_values = {line: Value.INACTIVE for line in lines}
+
+print(f"Using chip: {chip}", flush=True)
+print(f"Lines: {' '.join(str(line) for line in lines)}", flush=True)
+print(f"High: {sys.argv[2]}, low: {sys.argv[3]}", flush=True)
+print("All selected lines are toggled together. Press Ctrl-C to stop.", flush=True)
+
+with gpiod.request_lines(
+    chip,
+    consumer="gpio_pin_walk",
+    config={tuple(lines): settings},
+) as request:
+    try:
+        while True:
+            request.set_values(high_values)
+            log(f"SET HIGH lines {lines} for {sys.argv[2]}")
+            time.sleep(high_period)
+
+            request.set_values(low_values)
+            log(f"SET LOW  lines {lines} for {sys.argv[3]}")
+            time.sleep(low_period)
+    except KeyboardInterrupt:
+        request.set_values(low_values)
+        log(f"STOP requested; SET LOW lines {lines} before release")
+PY
