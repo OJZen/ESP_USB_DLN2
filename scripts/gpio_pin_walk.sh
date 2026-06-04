@@ -21,17 +21,6 @@ else
     LINES=(0 1 2 3 4 5 6 7)
 fi
 
-active_pid=""
-
-cleanup() {
-    if [[ -n "$active_pid" ]] && kill -0 "$active_pid" 2>/dev/null; then
-        kill "$active_pid" 2>/dev/null || true
-        wait "$active_pid" 2>/dev/null || true
-    fi
-}
-
-trap cleanup EXIT INT TERM
-
 require_cmd() {
     if ! command -v "$1" >/dev/null 2>&1; then
         echo "missing required command: $1" >&2
@@ -39,25 +28,14 @@ require_cmd() {
     fi
 }
 
-hold_line() {
-    local line="$1"
-    local value="$2"
-    local seconds="$3"
+format_period() {
+    local period="$1"
 
-    printf '%(%H:%M:%S)T line %s -> %s for %ss\n' -1 "$line" "$value" "$seconds"
-
-    gpioset -c "$CHIP" "${line}=${value}" &
-    active_pid="$!"
-
-    sleep 0.05
-    if ! kill -0 "$active_pid" 2>/dev/null; then
-        wait "$active_pid"
+    if [[ "$period" =~ [[:alpha:]] ]]; then
+        printf '%s\n' "$period"
+    else
+        printf '%ss\n' "$period"
     fi
-
-    sleep "$seconds"
-    kill "$active_pid" 2>/dev/null || true
-    wait "$active_pid" 2>/dev/null || true
-    active_pid=""
 }
 
 require_cmd gpioset
@@ -69,12 +47,16 @@ fi
 
 echo "Using chip: $CHIP"
 echo "Lines: ${LINES[*]}"
-echo "High: ${HIGH_SECONDS}s, low: ${LOW_SECONDS}s"
+high_period="$(format_period "$HIGH_SECONDS")"
+low_period="$(format_period "$LOW_SECONDS")"
+
+echo "High: $high_period, low: $low_period"
+echo "All selected lines start high, then toggle together forever."
 echo "Press Ctrl-C to stop."
 
-while true; do
-    for line in "${LINES[@]}"; do
-        hold_line "$line" 1 "$HIGH_SECONDS"
-        hold_line "$line" 0 "$LOW_SECONDS"
-    done
+args=()
+for line in "${LINES[@]}"; do
+    args+=("${line}=1")
 done
+
+exec gpioset -c "$CHIP" -t "$high_period,$low_period" "${args[@]}"
