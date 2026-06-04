@@ -42,3 +42,9 @@ USB GPIO device.
   `chip name=gpiochip2 label=dln2 lines=8`.
 - Verified line 0 input read path through GPIO chardev:
   `line 0 input value=1`.
+- After installing libgpiod v2.2.4, verified the normal tools:
+  - `gpiodetect` reports `gpiochip2 [dln2] (8 lines)`.
+  - `gpioinfo -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00`
+    reports 8 unnamed input lines.
+  - `gpioget -c ... --numeric 0 1 2 3 4 5 6 7` succeeds.
+  - `gpioset -c ... -t 100ms,0 0=1` succeeds and exits.

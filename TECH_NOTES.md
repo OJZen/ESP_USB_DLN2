@@ -66,12 +66,16 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 
 - The host automatically bound the mainline `dln2` driver with VID/PID
   `a257:2013`; no `new_id` binding was required.
-- `gpiodetect`, `gpioinfo`, `gpioset`, and `gpioget` were not installed on
-  this host during testing. Equivalent GPIO chardev ioctls were used instead.
 - Verified result:
   - `/dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00`
   - `chip name=gpiochip2 label=dln2 lines=8`
   - line 0 input read succeeded
+- After installing libgpiod v2.2.4, verified:
+  - `gpiodetect`
+  - `gpioinfo -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00`
+  - `gpioget -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 --numeric 0`
+  - `gpioget -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 --numeric 0 1 2 3 4 5 6 7`
+  - `gpioset -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -t 100ms,0 0=1`
 - The kernel also autoloads I2C, SPI, and ADC DLN-2 subdrivers. The firmware
   currently returns `DLN2_RES_NOT_IMPLEMENTED` for those valid but unsupported
   handles.
@@ -90,3 +94,12 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   for 2 MB. ESP-IDF warns and uses the image header size. This does not block
   the current MVP but should be cleaned up later if larger partitions are
   needed.
+- libgpiod v2 syntax is different from older examples: use `-c <chip>` and
+  pass offsets as separate arguments, for example `gpioget -c gpiochip2 0`.
+- `gpioset -p <period>` does not mean "exit after this period" in libgpiod
+  v2. It keeps the line requested after the minimum hold period. Use
+  `-t 100ms,0` for a short finite output pulse.
+- After `gpioset` exits, `gpioinfo` may briefly report the released line as
+  output with no consumer. The Linux `gpio-dln2` driver caches direction and
+  does not clear its `output_enabled` bitmap in the free path. A subsequent
+  input request, such as `gpioget`, refreshes it.
