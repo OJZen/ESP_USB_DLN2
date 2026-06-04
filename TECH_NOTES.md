@@ -68,6 +68,32 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 | 5          | GPIO7         |
 | 6          | GPIO8         |
 | 7          | GPIO9         |
+| 8          | GPIO10        |
+| 9          | GPIO11        |
+| 10         | GPIO12        |
+| 11         | GPIO13        |
+| 12         | GPIO14        |
+| 13         | GPIO15        |
+| 14         | GPIO16        |
+| 15         | GPIO17        |
+| 16         | GPIO18        |
+| 17         | GPIO21        |
+
+## Excluded GPIOs
+
+- GPIO0: boot strapping pin, `KEY@BOOT`, auto-download path.
+- GPIO3: strapping pin for JTAG signal source.
+- GPIO19/GPIO20: native USB D-/D+ used by the DLN-2 USB device.
+- GPIO35/GPIO36/GPIO37: used internally for OSPI PSRAM on ESP32-S3R8 modules.
+- GPIO39/GPIO40/GPIO41/GPIO42: JTAG pin group; reserved until explicitly
+  needed and tested.
+- GPIO43/GPIO44: UART0 TX/RX, used for flashing and logs through CH343.
+- GPIO45: strapping pin and `KEY@USER` path on the WeAct board.
+- GPIO46: strapping pin.
+- GPIO48: connected to the onboard WS2812 LED path.
+- GPIO38/GPIO47: kept reserved in the stable map for now; both are exposed on
+  the board, but they live in the high-numbered alternate-function group and
+  need separate hardware validation before export.
 
 ## Verification Notes
 
@@ -84,6 +110,12 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   - `gpioget -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 --numeric 0 1 2 3 4 5 6 7`
   - `gpioset -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -t 100ms,0 0=1`
   - `gpiomon -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -e both --debounce-period 10ms --idle-timeout 1s 0`
+- After expanding the safe GPIO map to 18 lines, verified:
+  - `gpiodetect` reports `gpiochip2 [dln2] (18 lines)`.
+  - `gpioinfo -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17`
+  - `gpioget -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 --numeric 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17`
+  - `gpioset -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -t 100ms,0 17=1`
+  - `gpiomon -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -e both --debounce-period 10ms --idle-timeout 1s 17`
 - The kernel also autoloads I2C, SPI, and ADC DLN-2 subdrivers. The firmware
   currently returns `DLN2_RES_NOT_IMPLEMENTED` for those valid but unsupported
   handles.
@@ -116,9 +148,8 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   operation. On Ctrl-C or SIGTERM it attempts to set all selected lines low
   before releasing the request.
 - Linux GPIO line offsets are DLN-2 line numbers, not ESP32-S3 GPIO numbers.
-  In the current firmware, line 0 maps to ESP32 GPIO1 and line 7 maps to ESP32
-  GPIO9. This is why probing board pads GPIO8/GPIO9 toggles during the
-  `0..7` line test, while board pads GPIO0/GPIO3 do not.
+  In the current firmware, line 0 maps to ESP32 GPIO1 and line 17 maps to
+  ESP32 GPIO21.
 - On the WeAct ESP32S3-A schematic, GPIO0 is tied to `KEY@BOOT` and the
   auto-download circuit path. GPIO0 and GPIO3 are also ESP32-S3 strapping pins,
   so keeping them out of the first stable GPIO export avoids boot-mode and

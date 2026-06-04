@@ -54,6 +54,16 @@ static const gpio_num_t s_gpio_map[] = {
     GPIO_NUM_7,
     GPIO_NUM_8,
     GPIO_NUM_9,
+    GPIO_NUM_10,
+    GPIO_NUM_11,
+    GPIO_NUM_12,
+    GPIO_NUM_13,
+    GPIO_NUM_14,
+    GPIO_NUM_15,
+    GPIO_NUM_16,
+    GPIO_NUM_17,
+    GPIO_NUM_18,
+    GPIO_NUM_21,
 };
 
 #define DLN2_GPIO_COUNT ((uint16_t)(sizeof(s_gpio_map) / sizeof(s_gpio_map[0])))

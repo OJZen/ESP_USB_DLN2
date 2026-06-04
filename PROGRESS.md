@@ -15,6 +15,8 @@ USB GPIO device.
       `/dev/gpiochipX`.
 - [x] M6: Implement DLN-2 GPIO event configuration and verify Linux `gpiomon`
       can enable edge monitoring.
+- [x] M7: Expand the stable GPIO export while excluding occupied and high-risk
+      ESP32-S3 pins.
 
 ## Log
 
@@ -66,3 +68,15 @@ USB GPIO device.
   - `gpioget -c ... --numeric 0 1 2 3 4 5 6 7` succeeds.
   - `gpiomon -c ... -e both --debounce-period 10ms --idle-timeout 1s 0`
     successfully enables edge monitoring and exits cleanly.
+- Expanded the exported GPIO set from 8 to 18 lines, mapped to ESP32-S3
+  GPIO1, GPIO2, GPIO4-GPIO18, and GPIO21.
+- Documented excluded occupied/high-risk pins: boot/JTAG strapping pins,
+  native USB pins, UART0 flash/log pins, OSPI PSRAM pins, onboard key/LED
+  paths, and reserved high-numbered alternate-function pins.
+- Rebuilt and flashed the 18-line firmware. Verified:
+  - `gpiodetect` reports `gpiochip2 [dln2] (18 lines)`.
+  - `gpioinfo -c ... 0..17` reports all 18 exported lines as inputs.
+  - `gpioget -c ... --numeric 0..17` succeeds.
+  - `gpioset -c ... -t 100ms,0 17=1` succeeds and releases back to input.
+  - `gpiomon -c ... -e both --debounce-period 10ms --idle-timeout 1s 17`
+    successfully enables event monitoring on the new highest line.
