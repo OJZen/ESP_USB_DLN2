@@ -53,7 +53,7 @@ minimal command coverage and resource ownership.
 Current status: steps 1-5 are implemented enough for Linux GPIO, I2C adapter,
 SPI master enumeration, ADC IIO raw sysfs reads, and the firmware side of ADC
 triggered-buffer events. I2C/SPI still need successful target-device transfer
-validation. ADC buffered sample reads still need a root-permission host test.
+validation. ADC buffered sample reads are verified through the host IIO device.
 
 ## Resource Ownership
 
@@ -233,8 +233,8 @@ Current state:
   and should not be treated as electrical calibration results.
 - Firmware support exists for the Linux triggered-buffer path:
   `CHANNEL_SET_CFG`, periodic `CONDITION_MET_EV`, and `GET_ALL_VAL`.
-- Host buffered sample reads are pending root access to the IIO sysfs buffer
-  controls and `/dev/iio:device0`.
+- Host buffered sample reads through `/dev/iio:device0` were verified with
+  `scripts/iio_adc_buffer_test.py` under `sudo`.
 
 Linux probe path:
 
@@ -282,7 +282,5 @@ Buffered read path:
 
 Next target:
 
-- Run `scripts/iio_adc_buffer_test.py` as root to verify binary buffered sample
-  reads from `/dev/iio:device0`.
 - Add a C3 or external analog fixture if repeatable ADC electrical validation
   is needed.

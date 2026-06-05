@@ -333,10 +333,11 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   reads enable/disable individual ADC channels around each read; the firmware
   claims/releases the corresponding physical GPIO on those channel commands.
 - ADC buffered IIO mode now has firmware support for `CHANNEL_SET_CFG`,
-  `CONDITION_MET_EV`, and `GET_ALL_VAL`, but host-side buffer validation needs
-  root access unless udev/sysfs permissions are relaxed. On this host the IIO
-  sysfs enable files and `/dev/iio:device0` are `root:root`, and
-  passwordless sudo is not available to the current process.
-- `scripts/iio_adc_buffer_test.py` is the intended host smoke test once root
-  access is available. Example:
+  `CONDITION_MET_EV`, and `GET_ALL_VAL`. It was validated with:
   `sudo ./scripts/iio_adc_buffer_test.py --channels "0 1" --frequency 10 --samples 8`.
+- The validated buffer test read 8 frames from `/dev/iio:device0`; each frame
+  contained both enabled channels. The observed values were full-scale because
+  the ADC inputs were floating, so this is protocol validation, not calibration
+  or voltage-accuracy validation.
+- Root access is still required for the current host's IIO buffer sysfs files
+  and `/dev/iio:device0` unless udev/sysfs permissions are relaxed.

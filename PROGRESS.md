@@ -36,6 +36,7 @@ USB GPIO device.
       sysfs raw reads.
 - [x] M18: Add the firmware-side Linux `dln2-adc` triggered-buffer event path
       and host buffer test script.
+- [x] M19: Verify Linux IIO buffered ADC sample reads through `/dev/iio:device0`.
 
 ## Log
 
@@ -191,12 +192,12 @@ USB GPIO device.
   - `/sys/class/spi_master/spi0` still resolves to the DLN-2 SPI child path.
   - `/sys/bus/iio/devices/iio:device0/name` reports `dln2-adc`.
   - `in_voltage0_raw` through `in_voltage3_raw` still read successfully.
-- Full IIO buffered read validation is pending host permissions. On this host
-  `/sys/bus/iio/devices/iio:device0/buffer/enable`,
-  `scan_elements/in_voltage*_en`, `sampling_frequency`, and `/dev/iio:device0`
-  are owned by `root:root`; `sudo -n` is not available for the current Codex
-  process. Running `./scripts/iio_adc_buffer_test.py --channels 0` currently
-  fails at `buffer/enable` with permission denied, as expected.
+- User verified full IIO buffered reads with root privileges:
+  `sudo ./scripts/iio_adc_buffer_test.py --channels "0 1" --frequency 10 --samples 8`.
+- The root buffer test returned 8 samples from `/dev/iio:device0` with both
+  selected channels present in every frame:
+  `in_voltage0=1023` and `in_voltage1=1023`. The inputs are still floating, so
+  this validates the Linux IIO buffer protocol path rather than analog accuracy.
 
 ### 2026-06-04
 
