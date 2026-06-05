@@ -84,6 +84,21 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   probe, any physical pin needed by a real I2C/SPI/ADC peripheral must be
   removed from the exported GPIO map before that peripheral can probe
   successfully.
+- The first I2C port uses ESP32-S3 GPIO38 for SDA and GPIO47 for SCL. The WeAct
+  ESP32S3-A schematic exposes both pins on the headers, and neither pin is in
+  the current 18-line GPIO export.
+- `DLN2_I2C_ENABLE` is enough for the Linux `i2c-dln2` probe to register an
+  adapter. With GPIO38/GPIO47 available, Linux now creates `/dev/i2c-4` with
+  name `dln2-i2c-3-2.1.2:1.0-0` on the current host.
+- The I2C firmware path implements only Linux-used commands:
+  `DLN2_CMD(0x01, 0x03)`, `DLN2_CMD(0x02, 0x03)`,
+  `DLN2_CMD(0x06, 0x03)`, and `DLN2_CMD(0x07, 0x03)`.
+- Linux `i2c-dln2` currently sends `mem_addr_len = 0`, so the firmware rejects
+  non-zero I2C memory-address fields with `DLN2_RES_INVALID_VALUE` until a real
+  host path needs that extension.
+- Host runtime I2C tests need read/write permission on `/dev/i2c-*`. On this
+  machine `/dev/i2c-4` is `root:i2c 660`, while user `jzen` is not in the
+  `i2c` group.
 
 ## Implemented USB Shape
 

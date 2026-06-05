@@ -103,6 +103,13 @@ Remaining GPIO work:
 
 ## I2C Minimal Implementation
 
+Current state:
+
+- I2C port `0` is implemented with ESP32-S3 GPIO38 as SDA and GPIO47 as SCL.
+- Linux adapter enumeration works; the current host creates `/dev/i2c-4`.
+- Runtime scanning/transfer tests still need host access to `/dev/i2c-4` and an
+  I2C target device.
+
 Linux probe path:
 
 - `DLN2_I2C_ENABLE` (`DLN2_CMD(0x01, 0x03)`)
@@ -126,13 +133,11 @@ Runtime transfer path:
   - TX: `u8 port`
   - RX: no payload
 
-First target:
+Next target:
 
-- One I2C port, port `0`.
-- 100 kHz default bus.
-- No emulated internal I2C devices initially.
-- Validate Linux creates `/dev/i2c-*`.
-- Validate with either C3 I2C slave firmware or a simple external I2C device.
+- Add a C3 I2C slave test firmware path or connect a simple external I2C
+  device to S3 GPIO38/GPIO47.
+- Verify `i2cdetect` and at least one read/write transaction from Linux.
 
 Not needed for first Linux path:
 

@@ -11,6 +11,7 @@ void dln2_init(void)
 {
     dln2_pin_init();
     dln2_gpio_init();
+    dln2_i2c_init();
 }
 
 size_t dln2_make_response(const dln2_request_t *request, uint16_t result,
@@ -137,6 +138,8 @@ size_t dln2_handle_request(const uint8_t *request_buf, size_t request_len,
         return dln2_gpio_handle_request(&request, response, response_cap);
 
     case DLN2_HANDLE_I2C:
+        return dln2_i2c_handle_request(&request, response, response_cap);
+
     case DLN2_HANDLE_SPI:
     case DLN2_HANDLE_ADC:
         ESP_LOGW(TAG, "unsupported handle=%u id=0x%04x", request.handle,

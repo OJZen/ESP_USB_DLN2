@@ -28,6 +28,9 @@
 #define DLN2_RES_INVALID_PORT_NUMBER   0xa8
 #define DLN2_RES_PIN_NOT_CONNECTED_TO_MODULE 0xaa
 #define DLN2_RES_INVALID_PIN_NUMBER    0xab
+#define DLN2_RES_INVALID_BUFFER_SIZE   0xae
+#define DLN2_RES_I2C_MASTER_SENDING_ADDRESS_FAILED 0xba
+#define DLN2_RES_I2C_MASTER_SENDING_DATA_FAILED 0xbb
 #define DLN2_RES_INVALID_CHANNEL_NUMBER 0xc0
 #define DLN2_RES_INVALID_VALUE         0xe2
 
@@ -100,6 +103,10 @@ uint16_t dln2_pin_claim(int gpio, uint8_t module);
 uint16_t dln2_pin_release(int gpio, uint8_t module);
 bool dln2_pin_is_claimed(int gpio, uint8_t module);
 const char *dln2_module_name(uint8_t module);
+
+void dln2_i2c_init(void);
+size_t dln2_i2c_handle_request(const dln2_request_t *request,
+                               uint8_t *response, size_t response_cap);
 
 void dln2_gpio_init(void);
 size_t dln2_gpio_handle_request(const dln2_request_t *request,

@@ -28,6 +28,8 @@ USB GPIO device.
       Linux DLN-2 subdrivers and the `pico-usb-io-board` device reference.
 - [x] M14: Add central ESP32-S3 pin ownership tracking and route GPIO
       enable/disable through it.
+- [x] M15: Implement the Linux `i2c-dln2` minimal enable/read/write/disable
+      path and verify adapter enumeration.
 
 ## Log
 
@@ -99,6 +101,26 @@ USB GPIO device.
   - `gpioset` on line 17 succeeds.
   - `gpiomon` can request events on line 17.
   - The C3 closed-loop test still passes for wired lines 0-6.
+- Implemented the minimal Linux `i2c-dln2` command set:
+  `DLN2_I2C_ENABLE`, `DLN2_I2C_DISABLE`, `DLN2_I2C_WRITE`, and
+  `DLN2_I2C_READ`.
+- Assigned I2C port 0 to ESP32-S3 GPIO38 as SDA and GPIO47 as SCL. These pins
+  are exposed on the WeAct ESP32S3-A header and were not part of the current
+  18-line GPIO export, so GPIO line count remains unchanged.
+- I2C enable now claims SDA/SCL through the central pin ownership table and
+  initializes ESP-IDF's I2C master bus at 100 kHz with internal pullups enabled.
+- Rebuilt and flashed the S3 firmware to `/dev/ttyACM1`.
+- Verified after the I2C change:
+  - `lsusb -d a257:2013` reports `Diolan DLN-2 USB GPIO`.
+  - `gpiodetect` still reports `gpiochip2 [dln2] (18 lines)`.
+  - `i2cdetect -l` now reports `/dev/i2c-4` as
+    `dln2-i2c-3-2.1.2:1.0-0`.
+  - `/sys/class/i2c-dev/i2c-4/name` reports the same `dln2-i2c` adapter name.
+  - `gpioget` on lines 0-17 succeeds.
+  - The C3 closed-loop test still passes for wired lines 0-6.
+- Runtime I2C scanning with `i2cdetect -y 4` is not yet verified because the
+  host created `/dev/i2c-4` as `root:i2c` with mode `660`, the current user is
+  not in the `i2c` group, and passwordless sudo is not available.
 
 ### 2026-06-04
 
