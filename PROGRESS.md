@@ -45,6 +45,9 @@ USB GPIO device.
 - [x] M23: Verify Linux `spi-dln2` read-only/write-only paths and SPI modes
       0-2 against the C3 fixture.
 - [x] M24: Resolve and verify the remaining SPI mode-3 behavior.
+- [x] M25: Add an ESP32-C3 I2C slave fixture and host-side Linux `i2c-dln2`
+      read/write test tooling.
+- [ ] M26: Validate DLN-2 I2C runtime transfers against the C3 fixture.
 
 ## Log
 
@@ -339,6 +342,26 @@ USB GPIO device.
   - Linux SPI statistics reported `messages=8` and `errors=0` for the clean
     final short regression.
   - Recent kernel log contained no new Oops, call trace, or DLN-2/SPI error.
+- User chose to skip ADC electrical validation for now and continue with I2C.
+- Extended the ESP32-C3 test firmware to version `c3-probe-v4`. It preserves
+  the GPIO and SPI fixture commands and adds an I2C slave fixture on C3 GPIO0
+  as SDA and C3 GPIO1 as SCL.
+- Added C3 I2C commands:
+  `I2C START [addr]`, `I2C STOP`, `I2C STATUS`, `I2C RX <len>`, and
+  `I2C LOAD <len>`.
+- Added `scripts/i2c_c3_slave_test.py`, a host-side test that drives Linux
+  `/dev/i2c-*` through the mainline `i2c-dln2` adapter, coordinates the C3
+  serial fixture, and verifies both host write-to-C3 and C3-to-host read data.
+- Built `c3_test` successfully and flashed `c3-probe-v4` to `/dev/ttyACM2`.
+- Verified the C3 command plane after flashing:
+  - `PING` returns `OK PONG c3-probe-v4 channels=8`.
+  - `HELP` lists the new I2C commands.
+  - `I2C START 0x52`, `I2C STATUS`, and `I2C STOP` return successful
+    responses.
+- Confirmed the Linux DLN-2 I2C adapter is still present as `/dev/i2c-4` with
+  name `dln2-i2c-3-2.1.2:1.0-0`.
+- I2C transfer validation is pending the physical I2C wiring between S3
+  GPIO38/GPIO47 and C3 GPIO0/GPIO1.
 
 ### 2026-06-04
 

@@ -305,6 +305,35 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   re-enumeration. It can retain a stale `spi_device` pointer and fault on
   unload. The current replacement helper is `spi_dln2_spidev_test.ko`.
 
+## ESP32-C3 I2C Fixture
+
+- `c3_test` version `c3-probe-v4` adds a command-driven I2C slave fixture while
+  preserving the GPIO and SPI fixture commands.
+- I2C fixture pins:
+  - C3 GPIO0: SDA, connect to S3 GPIO38.
+  - C3 GPIO1: SCL, connect to S3 GPIO47.
+  - GND: connect C3 and S3 ground.
+- The default fixture slave address is `0x52`; `I2C START [addr]` accepts any
+  7-bit non-zero address.
+- The current test maximum is 256 bytes, matching the S3 DLN-2 I2C firmware's
+  maximum transfer size.
+- `I2C RX <len>` arms one C3 slave receive before the Linux host write. After
+  the host transfer, `I2C STATUS` reports the received bytes in `rx=<hex>`.
+- `I2C LOAD <len>` preloads the C3 slave transmit buffer before the Linux host
+  read. The transmitted pattern is `c0 c1 ... ff c0 ...`.
+- `scripts/i2c_c3_slave_test.py` finds the DLN-2 I2C adapter by looking for an
+  `/sys/class/i2c-dev/i2c-X/name` containing `dln2-i2c`, unless `--i2c-dev`
+  is provided. On this host the current adapter is `/dev/i2c-4`.
+- The script uses the Linux `i2c-dev` `I2C_SLAVE` ioctl plus raw `read()` and
+  `write()` calls, so it exercises the mainline `i2c-dln2` `READ` and `WRITE`
+  command paths instead of bypassing the kernel driver.
+- Current Codex shell processes still do not list group `i2c` in `id`, while
+  `/dev/i2c-4` is `root:i2c 660`. Run the script through `sg i2c -c ...`, a
+  `newgrp i2c` shell, or `sudo` if direct access fails.
+- Short I2C wires may work with the internal pullups currently enabled on the
+  S3 master bus, but external pullups around 4.7 kOhm from SDA/SCL to 3V3 are
+  the more robust lab setup. Do not pull the bus up to 5 V.
+
 ## Verification Notes
 
 - The host automatically bound the mainline `dln2` driver with VID/PID
