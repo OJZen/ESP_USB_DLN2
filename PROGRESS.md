@@ -21,8 +21,33 @@ USB GPIO device.
       queuing.
 - [x] M9: Add an ESP32-C3 based external GPIO probe firmware and host
       closed-loop test harness.
+- [x] M10: Validate the C3 closed-loop probe against the S3 DLN-2 GPIO device.
 
 ## Log
+
+### 2026-06-05
+
+- Connected the ESP32-C3 probe on `/dev/ttyACM2`, identified as an Espressif
+  USB JTAG/serial debug unit.
+- Flashed `c3_test` to `/dev/ttyACM2`; esptool identified an ESP32-C3 rev v0.4
+  with MAC `cc:8d:a2:c2:88:2c`.
+- Found that the initial C3 firmware printed boot/probe logs over
+  USB-Serial/JTAG but did not accept host-to-device console input. Fixed this
+  by configuring the C3 project for USB-Serial/JTAG console and explicitly
+  installing the USB-Serial/JTAG driver plus VFS in the probe firmware.
+- Added `c3_test/sdkconfig.defaults` with
+  `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y` so regenerated C3 configs keep the
+  correct console path.
+- Increased the C3 host script serial write timeout so USB CDC writes have
+  enough time during board reset and driver startup.
+- User wired C3 channels 0-6 only; channel 7 / C3 GPIO10 was intentionally left
+  disconnected.
+- Ran the closed-loop host test:
+  `python3 -u scripts/c3_closed_loop_test.py --c3-port /dev/ttyACM2 --lines "0 1 2 3 4 5 6"`.
+- Verified all seven wired channels passed:
+  - S3 output through Linux `gpiod`, observed by C3 input.
+  - C3 output, observed by S3 input through Linux `gpiod`.
+  - C3 pulse generation, observed by Linux `gpiomon` edge events.
 
 ### 2026-06-04
 

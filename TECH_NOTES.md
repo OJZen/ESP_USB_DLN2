@@ -121,9 +121,22 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - The C3 host script waits after opening the serial port and retries `PING`
   synchronization. This handles C3 boards whose USB-UART auto-reset circuit
   toggles reset when the serial device is opened.
+- For C3 USB-Serial/JTAG command input, setting
+  `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y` is not sufficient by itself. The probe
+  firmware explicitly installs `usb_serial_jtag_driver` and calls
+  `usb_serial_jtag_vfs_use_driver()` before using `fgets(stdin)`. Without this,
+  boot logs and `printf()` output can appear on `/dev/ttyACM2`, while
+  host-to-device writes time out in pyserial and `idf.py monitor`.
+- Keep the C3 serial write timeout separate from the read polling timeout. A
+  short read timeout is useful for command response polling, but USB CDC writes
+  around reset/driver startup need a longer timeout.
 - The first closed-loop pass should use S3 DLN lines 0-7. The same C3 probe can
   cover S3 lines 8-17 later by moving the eight resistor-protected wires and
   passing the selected line offsets with `--lines`.
+- If C3 GPIO10 / probe channel 7 is not wired, run the test with
+  `--lines "0 1 2 3 4 5 6"` so the script only drives and samples channels
+  0-6. This seven-channel setup was verified on `/dev/ttyACM2` against S3 DLN
+  lines 0-6.
 
 ## Verification Notes
 

@@ -1,11 +1,15 @@
 #include <ctype.h>
+#include <fcntl.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "driver/gpio.h"
+#include "driver/usb_serial_jtag.h"
+#include "driver/usb_serial_jtag_vfs.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -29,6 +33,32 @@ static const gpio_num_t s_channels[] = {
 
 static uint32_t s_output_enable_mask;
 static uint32_t s_output_value_mask;
+
+static esp_err_t configure_console_io(void)
+{
+#if defined(CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG)
+    fflush(stdout);
+    fsync(fileno(stdout));
+
+    usb_serial_jtag_vfs_set_rx_line_endings(ESP_LINE_ENDINGS_LF);
+    usb_serial_jtag_vfs_set_tx_line_endings(ESP_LINE_ENDINGS_LF);
+
+    usb_serial_jtag_driver_config_t cfg = {
+        .tx_buffer_size = 256,
+        .rx_buffer_size = 256,
+    };
+
+    esp_err_t err = usb_serial_jtag_driver_install(&cfg);
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        return err;
+    }
+
+    usb_serial_jtag_vfs_use_driver();
+    fcntl(fileno(stdin), F_SETFL, 0);
+    fcntl(fileno(stdout), F_SETFL, 0);
+#endif
+    return ESP_OK;
+}
 
 static char *next_token(char **cursor)
 {
@@ -311,10 +341,15 @@ void app_main(void)
     char line[MAX_LINE_LEN];
 
     esp_log_level_set("*", ESP_LOG_WARN);
+    esp_err_t err = configure_console_io();
+    if (err != ESP_OK) {
+        printf("ERR CONSOLE %s\n", esp_err_to_name(err));
+    }
+
     setvbuf(stdin, NULL, _IONBF, 0);
     setvbuf(stdout, NULL, _IONBF, 0);
 
-    esp_err_t err = set_inputs(ALL_CHANNELS_MASK);
+    err = set_inputs(ALL_CHANNELS_MASK);
     if (err != ESP_OK) {
         printf("ERR BOOT %s\n", esp_err_to_name(err));
     }

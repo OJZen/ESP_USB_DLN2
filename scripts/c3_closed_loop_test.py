@@ -16,10 +16,13 @@ DEFAULT_LINES = [0, 1, 2, 3, 4, 5, 6, 7]
 
 class C3Probe:
     def __init__(self, port: str, baud: int, timeout: float,
-                 open_delay: float) -> None:
-        self.serial = serial.Serial(port, baudrate=baud, timeout=timeout)
-        self.serial.dtr = False
-        self.serial.rts = False
+                 write_timeout: float, open_delay: float) -> None:
+        self.serial = serial.Serial(
+            port,
+            baudrate=baud,
+            timeout=timeout,
+            write_timeout=write_timeout,
+        )
         time.sleep(open_delay)
         self.serial.reset_input_buffer()
 
@@ -220,6 +223,8 @@ def main() -> int:
     parser.add_argument("--settle-ms", type=int, default=50)
     parser.add_argument("--open-delay", type=float, default=1.0,
                         help="seconds to wait after opening the C3 serial port")
+    parser.add_argument("--write-timeout", type=float, default=3.0,
+                        help="seconds to allow for serial writes to the C3")
     parser.add_argument("--sync-attempts", type=int, default=5,
                         help="number of PING attempts used to synchronize with C3")
     parser.add_argument("--skip-events", action="store_true")
@@ -232,6 +237,7 @@ def main() -> int:
         raise SystemExit("the default C3 probe firmware supports at most 8 channels")
 
     c3 = C3Probe(args.c3_port, args.baud, timeout=0.2,
+                 write_timeout=args.write_timeout,
                  open_delay=args.open_delay)
     try:
         print(c3.sync(args.sync_attempts))

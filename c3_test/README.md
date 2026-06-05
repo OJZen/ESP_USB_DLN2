@@ -1,7 +1,7 @@
 # ESP32-C3 GPIO Test Probe
 
-This firmware turns an ESP32-C3 board into a small serial-controlled GPIO
-probe for testing the ESP32-S3 DLN-2 GPIO firmware.
+This firmware turns an ESP32-C3 board into a small USB-Serial/JTAG controlled
+GPIO probe for testing the ESP32-S3 DLN-2 GPIO firmware.
 
 ## Default Channels
 
@@ -48,7 +48,8 @@ Linux line offsets to the host test script with `--lines`.
 ## Serial Commands
 
 The firmware accepts newline-terminated commands on the ESP-IDF console port at
-115200 baud:
+115200 baud. The project defaults this console to the C3 USB-Serial/JTAG port
+with `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y`.
 
 - `PING`
 - `MAP`
@@ -94,6 +95,12 @@ resistors:
 
 ```bash
 ./scripts/c3_closed_loop_test.py --c3-port <C3_PORT>
+```
+
+If channel 7 / C3 GPIO10 is not wired, test only the first seven channels:
+
+```bash
+./scripts/c3_closed_loop_test.py --c3-port <C3_PORT> --lines "0 1 2 3 4 5 6"
 ```
 
 The script uses the existing S3 DLN-2 GPIO device at
