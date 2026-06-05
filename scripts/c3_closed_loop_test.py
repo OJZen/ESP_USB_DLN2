@@ -22,6 +22,7 @@ class C3Probe:
             baudrate=baud,
             timeout=timeout,
             write_timeout=write_timeout,
+            exclusive=True,
         )
         time.sleep(open_delay)
         self.serial.reset_input_buffer()
@@ -166,7 +167,7 @@ def test_c3_output_to_s3(chip: str, lines: list[int], c3: C3Probe,
 
 def test_c3_pulse_to_s3_event(chip: str, line: int, channel: int,
                               c3: C3Probe) -> None:
-    print("TEST c3-pulse -> s3-gpiomon-event")
+    print(f"TEST c3-pulse ch{channel} -> s3-line{line}-gpiomon-event")
 
     mask = 1 << channel
     c3.drive(mask, 0)
@@ -202,12 +203,12 @@ def test_c3_pulse_to_s3_event(chip: str, line: int, channel: int,
     if proc.returncode != 0:
         raise RuntimeError(f"gpiomon failed: {stderr.strip()}")
 
-    events = [line for line in stdout.splitlines()
-              if "rising" in line or "falling" in line]
+    events = [event_line for event_line in stdout.splitlines()
+              if "rising" in event_line or "falling" in event_line]
     if len(events) < 2:
         raise AssertionError(f"expected at least 2 events, got: {stdout!r}")
 
-    print("PASS c3-pulse -> s3-gpiomon-event")
+    print(f"PASS c3-pulse ch{channel} -> s3-line{line}-gpiomon-event")
 
 
 def main() -> int:
@@ -248,7 +249,8 @@ def main() -> int:
         test_c3_output_to_s3(args.chip, lines, c3, args.settle_ms / 1000.0)
 
         if not args.skip_events:
-            test_c3_pulse_to_s3_event(args.chip, lines[0], 0, c3)
+            for channel, line in enumerate(lines):
+                test_c3_pulse_to_s3_event(args.chip, line, channel, c3)
 
         c3.reset()
         print("PASS all closed-loop tests")

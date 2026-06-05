@@ -130,6 +130,9 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - Keep the C3 serial write timeout separate from the read polling timeout. A
   short read timeout is useful for command response polling, but USB CDC writes
   around reset/driver startup need a longer timeout.
+- Open the C3 serial port with pyserial `exclusive=True`. Parallel probes
+  against the same USB-Serial/JTAG TTY corrupt command/response streams and can
+  produce misleading partial lines.
 - The first closed-loop pass should use S3 DLN lines 0-7. The same C3 probe can
   cover S3 lines 8-17 later by moving the eight resistor-protected wires and
   passing the selected line offsets with `--lines`.

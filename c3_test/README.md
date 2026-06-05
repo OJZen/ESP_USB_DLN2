@@ -108,4 +108,5 @@ The script uses the existing S3 DLN-2 GPIO device at
 
 - S3 output through Linux `gpiod`, observed by C3 input.
 - C3 output, observed by S3 input through Linux `gpiod`.
-- C3 pulse generation, observed by Linux `gpiomon` events.
+- C3 pulse generation on every selected channel, observed by Linux `gpiomon`
+  events.

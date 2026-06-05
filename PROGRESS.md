@@ -40,6 +40,8 @@ USB GPIO device.
   correct console path.
 - Increased the C3 host script serial write timeout so USB CDC writes have
   enough time during board reset and driver startup.
+- Updated the C3 host script to open the serial port exclusively and to run the
+  `gpiomon` event check on every selected C3/S3 channel pair.
 - User wired C3 channels 0-6 only; channel 7 / C3 GPIO10 was intentionally left
   disconnected.
 - Ran the closed-loop host test:
@@ -47,7 +49,8 @@ USB GPIO device.
 - Verified all seven wired channels passed:
   - S3 output through Linux `gpiod`, observed by C3 input.
   - C3 output, observed by S3 input through Linux `gpiod`.
-  - C3 pulse generation, observed by Linux `gpiomon` edge events.
+  - C3 pulse generation on each selected channel, observed by Linux `gpiomon`
+    edge events.
 
 ### 2026-06-04
 
