@@ -283,15 +283,19 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   `DLN2_SPI_READ`; the C3 should observe zero MOSI bytes while the Linux host
   receives the C3 MISO pattern. `--direction write` exercises
   `DLN2_SPI_WRITE`; the C3 verifies MOSI while host RX is intentionally absent.
-- SPI modes 0, 1, and 2 have passed 16-byte full-duplex validation at 100 kHz
-  against the C3 fixture, and modes 0-2 have also passed 16-byte read-only and
-  write-only validation.
-- SPI mode 0 has additionally passed 256-byte read-only and 256-byte write-only
-  validation.
-- SPI mode 3 is not validated yet. The current C3 fixture reports a 17-byte
-  capture for a requested 16-byte full-duplex transaction, with host/C3 data
-  shifted relative to the expected byte pattern. Keep mode 3 out of any
-  supported-configuration claim until this is understood.
+- Because DLN-2 controls chip-select separately through `SET_SS` and
+  per-transfer attributes, the S3 firmware uses a normal ESP-IDF SPI device
+  with `spics_io_num = -1` and manually drives the CS GPIO. For CPOL=1 modes
+  2 and 3, the S3 must still make the ESP-IDF SPI master drive SCLK to idle
+  high before the first selected transfer. The firmware now sends one dummy
+  8-bit transaction with CS inactive after SPI enable/reconfiguration; normal
+  selected SPI slaves ignore this clock train because CS is high.
+- Without the CPOL idle-prime step, mode 3 could fail on the first short
+  full-duplex transaction after a mode change. The C3 fixture observed one
+  extra byte and both MOSI/MISO streams were shifted.
+- SPI modes 0-3 have passed full-duplex validation at 100 kHz and 1 MHz with
+  lengths 1, 2, 16, and 256 bytes. Mode 3 has also passed read-only and
+  write-only validation at lengths 1, 2, 16, and 256 bytes.
 - Reflashing or unplugging the S3 DLN-2 USB device removes any temporary
   `spidev0.0` child created by `tools/spi_test_device`; reload the helper after
   the new `/sys/class/spi_master/spi0` appears.

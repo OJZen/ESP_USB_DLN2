@@ -44,7 +44,7 @@ USB GPIO device.
       firmware path.
 - [x] M23: Verify Linux `spi-dln2` read-only/write-only paths and SPI modes
       0-2 against the C3 fixture.
-- [ ] M24: Resolve or explicitly scope the remaining SPI mode-3 behavior.
+- [x] M24: Resolve and verify the remaining SPI mode-3 behavior.
 
 ## Log
 
@@ -310,10 +310,27 @@ USB GPIO device.
   - `gpiodetect` reports `gpiochip2 [dln2] (10 lines)`.
   - `/sys/class/spi_master/spi0` resolves to the `dln2-spi` child path.
   - `/sys/bus/iio/devices/iio:device0/name` reports `dln2-adc`.
-- SPI mode 3 still fails against the current C3 fixture. The observed failure
-  is a one-bit/byte alignment mismatch where the C3 reports a 17-byte transfer
-  for a requested 16-byte transaction. Treat mode 3 as unresolved rather than
-  validated.
+- Investigated the remaining SPI mode-3 behavior after the `SET_MODE`
+  reconfiguration fix. The failure was concentrated around the first short
+  CPOL=1 full-duplex transaction after a mode change: C3 could capture one
+  extra byte and both directions appeared bit-shifted.
+- Added a S3 SPI CPOL idle-prime step after SPI enable/reconfiguration. For
+  modes 2 and 3, the firmware performs one dummy 8-bit SPI transaction while
+  the DLN-2-controlled CS line is inactive, so the ESP-IDF master leaves SCLK
+  at the correct idle-high level before the first real selected transfer.
+- Rebuilt and flashed the S3 CPOL idle-prime firmware to `/dev/ttyACM1`.
+- User reloaded `spi_dln2_spidev_test.ko` after S3 USB re-enumeration, and
+  `/dev/spidev0.0` was restored.
+- Verified the previously failing mode-3 boundary cases at 100 kHz:
+  full-duplex lengths 1, 2, 4, 16, and 256 bytes all passed; read-only and
+  write-only lengths 1, 2, 16, and 256 bytes also passed.
+- Verified a final full-duplex SPI matrix:
+  modes 0-3, lengths 1, 2, 16, and 256 bytes, at 100 kHz and 1 MHz. All 32
+  combinations passed against the C3 fixture.
+- Linux SPI statistics after the final matrix reported `messages=45` and
+  `errors=0`. No new kernel Oops or call trace appeared in the recent kernel
+  log; only expected USB disconnect/re-enumeration messages from S3 flashing
+  were present.
 
 ### 2026-06-04
 

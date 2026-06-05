@@ -37,6 +37,7 @@
 #define DLN2_SPI_ATTR_LEAVE_SS_LOW BIT(0)
 #define DLN2_SPI_FRAME_SIZE_8_BITS 8
 #define DLN2_SPI_MODE_MASK 0x03
+#define DLN2_SPI_MODE_CPOL BIT(1)
 
 typedef struct {
     bool enabled;
@@ -146,6 +147,25 @@ static esp_err_t spi_add_device(void)
     return spi_bus_add_device(DLN2_SPI_HOST, &dev_config, &s_spi.dev);
 }
 
+static void spi_prime_cpol_idle(void)
+{
+    uint8_t dummy = 0xff;
+    spi_transaction_t transaction = {
+        .length = 8,
+        .tx_buffer = &dummy,
+    };
+    esp_err_t err;
+
+    if (s_spi.dev == NULL || (s_spi.mode & DLN2_SPI_MODE_CPOL) == 0) {
+        return;
+    }
+
+    err = spi_device_transmit(s_spi.dev, &transaction);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "SPI CPOL idle prime failed: %s", esp_err_to_name(err));
+    }
+}
+
 static uint16_t spi_reconfigure_device(void)
 {
     esp_err_t err;
@@ -172,6 +192,7 @@ static uint16_t spi_reconfigure_device(void)
         return DLN2_RES_FAIL;
     }
 
+    spi_prime_cpol_idle();
     ESP_LOGI(TAG, "reconfigured SPI speed=%u mode=%u",
              (unsigned)s_spi.speed_hz, s_spi.mode);
     return DLN2_RES_SUCCESS;
@@ -221,6 +242,7 @@ static uint16_t spi_enable_bus(void)
     s_spi.enabled = true;
     s_spi.cs_active = false;
     gpio_set_level(DLN2_SPI_CS_GPIO, 1);
+    spi_prime_cpol_idle();
 
     ESP_LOGI(TAG,
              "enabled SPI port %u SCLK=GPIO%d MOSI=GPIO%d MISO=GPIO%d "
