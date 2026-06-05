@@ -152,7 +152,7 @@ static uint16_t spi_enable_bus(void)
         return result;
     }
 
-    err = spi_bus_initialize(DLN2_SPI_HOST, &bus_config, SPI_DMA_DISABLED);
+    err = spi_bus_initialize(DLN2_SPI_HOST, &bus_config, SPI_DMA_CH_AUTO);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "spi_bus_initialize failed: %s", esp_err_to_name(err));
         spi_release_bus_pins();

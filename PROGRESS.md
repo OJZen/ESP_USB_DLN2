@@ -37,6 +37,11 @@ USB GPIO device.
 - [x] M18: Add the firmware-side Linux `dln2-adc` triggered-buffer event path
       and host buffer test script.
 - [x] M19: Verify Linux IIO buffered ADC sample reads through `/dev/iio:device0`.
+- [x] M20: Add an ESP32-C3 SPI slave fixture and Linux spidev-based host test
+      tooling.
+- [x] M21: Verify DLN-2 SPI full-duplex transfers against the C3 fixture.
+- [x] M22: Verify full-size 256-byte DLN-2 SPI transfers through the DMA SPI
+      firmware path.
 
 ## Log
 
@@ -198,6 +203,78 @@ USB GPIO device.
   selected channels present in every frame:
   `in_voltage0=1023` and `in_voltage1=1023`. The inputs are still floating, so
   this validates the Linux IIO buffer protocol path rather than analog accuracy.
+- Extended the ESP32-C3 test firmware to version `c3-probe-v2`. It keeps the
+  existing GPIO probe commands and adds `SPI START`, `SPI STOP`, `SPI STATUS`,
+  and `SPI XFER <len> [timeout_ms]`.
+- The C3 SPI fixture uses DMA mode so it can cover the Linux `spi-dln2` maximum
+  256-byte transfer size instead of stopping at the non-DMA 64-byte FIFO limit.
+- C3 SPI fixture wiring uses C3 GPIO4/5/6/7 as SCLK/MOSI/MISO/CS with the S3
+  SPI pins GPIO10/11/12/13. C3 GPIO10 remains unused in the user's current
+  fixture.
+- Added `scripts/spi_c3_slave_test.py`, which arms one C3 SPI slave transfer,
+  sends one Linux `spidev` full-duplex transaction, then verifies both host RX
+  and C3-observed MOSI bytes.
+- Added `tools/spi_test_device`, a temporary out-of-tree kernel helper that
+  registers a `spidev` child on the existing Linux DLN-2 SPI master for lab
+  testing. This is needed because Linux only exposes `/sys/class/spi_master/spi0`
+  after `spi-dln2` probe; it does not create `/dev/spidev*` without a described
+  SPI slave device. The helper uses modalias `dh2228fv`, one of the SPI IDs
+  accepted by the mainline `spidev` driver.
+- Built `tools/spi_test_device/spi_test_device.ko` successfully against the
+  running kernel `7.0.11-arch1-1`.
+- Built and flashed the updated C3 firmware to `/dev/ttyACM2`.
+- Verified C3 command-plane responses:
+  - `PING` returns `OK PONG c3-probe-v2 channels=8`.
+  - `SPI START` returns `OK SPI START sclk=4 mosi=5 miso=6 cs=7 max=64`.
+  - `SPI STATUS` reports active SPI with zero completed transfers.
+  - `SPI STOP` returns `OK SPI STOP`.
+- SPI transfer validation is blocked until root loads the temporary spidev
+  helper, because the current Codex process cannot run interactive `sudo`.
+- A first root-side load using generic modalias `spidev` created
+  `/sys/bus/spi/devices/spi0.0` but did not bind the `spidev` driver or create
+  `/dev/spidev0.0`; the helper default was changed to `dh2228fv` and needs a
+  root reload before running the transfer test.
+- Root reloaded the helper with modalias `dh2228fv`, and Linux created
+  `/dev/spidev0.0` bound to the `spidev` driver.
+- Verified one DLN-2 SPI full-duplex transfer at 100 kHz, 16 bytes:
+  host RX matched the C3 MISO pattern `a0..af`, and the C3 recorded host MOSI
+  bytes `10..1f`.
+- Verified a SPI matrix at 10 kHz, 100 kHz, 500 kHz, and 1 MHz with 1, 4, 16,
+  and 64 byte transfers. All 16 combinations passed full-duplex validation.
+- A 256-byte transfer initially failed with Linux `EREMOTEIO`; C3 saw only a
+  one-byte transaction. The issue is consistent with the S3 firmware still
+  using ESP-IDF non-DMA SPI master mode, which is limited by the 64-byte FIFO.
+  The S3 SPI master path was changed to `SPI_DMA_CH_AUTO` so the firmware can
+  exercise the full Linux `spi-dln2` 256-byte transfer size.
+- Built and flashed the S3 SPI DMA firmware to `/dev/ttyACM1`.
+- Verified after S3 reflash:
+  - `lsusb -d a257:2013` reports the DLN-2 compatible device.
+  - `gpiodetect` reports `gpiochip2 [dln2] (10 lines)`.
+  - `i2cdetect -l` reports the `dln2-i2c` adapter at `/dev/i2c-4`.
+  - `/sys/class/spi_master/spi0` exists.
+  - `/sys/bus/iio/devices/iio:device0/name` reports `dln2-adc`.
+- The S3 USB re-enumeration removed the temporary `/dev/spidev0.0` child. A
+  root reload of `tools/spi_test_device/spi_test_device.ko` is required before
+  the 256-byte SPI retest can run.
+- Attempting to unload the first-generation helper after S3 re-enumeration
+  triggered a kernel Oops in `spi_test_device_exit()` because the module kept a
+  stale `spi_device` pointer after the parent SPI controller was removed. The
+  old module is stuck in the current kernel with refcount `-1`; avoid further
+  `rmmod spi_test_device` attempts and reboot later to clear it.
+- Added replacement helper `spi_dln2_spidev_test.ko`. It uses a different
+  module name, holds an explicit `spi_device` reference, and checks
+  `device_is_registered()` before unregistering the temporary child.
+- Removed the first-generation `spi_test_device.c` helper source from the
+  tracked tooling path to avoid accidental reuse.
+- User loaded `spi_dln2_spidev_test.ko`, and Linux created `/dev/spidev0.0`
+  bound to `spidev`.
+- Verified after the S3/C3 DMA changes:
+  - 64-byte full-duplex transfers pass at 100 kHz and 1 MHz.
+  - 256-byte full-duplex transfers pass at 100 kHz and 1 MHz.
+  - C3 records the expected MOSI stream and Linux host RX matches the C3 MISO
+    pattern for every tested transfer.
+  - `/sys/bus/spi/devices/spi0.0/statistics` reports 4 messages, 640 TX bytes,
+    640 RX bytes, and `errors=0` for the final retest run.
 
 ### 2026-06-04
 

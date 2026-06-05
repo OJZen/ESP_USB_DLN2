@@ -115,6 +115,9 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - The SPI firmware advertises one chip select, 10 kHz to 10 MHz, and only
   8-bit frame size support. Linux `spi-dln2` accepts this and registers
   `/sys/class/spi_master/spi0`.
+- ESP-IDF SPI master non-DMA mode is limited by the hardware FIFO. Use
+  `SPI_DMA_CH_AUTO` on the S3 SPI bus so the firmware can support the 256-byte
+  maximum transfer size used by Linux `spi-dln2`.
 - A Linux SPI controller does not automatically create `/dev/spidev*`. Actual
   SPI transfer tests need a described SPI slave device or a C3 SPI slave test
   fixture.
@@ -233,6 +236,52 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   `--lines "0 1 2 3 4 5 6"` so the script only drives and samples channels
   0-6. This seven-channel setup was verified on `/dev/ttyACM2` against S3 DLN
   lines 0-6.
+
+## ESP32-C3 SPI Fixture
+
+- `c3_test` version `c3-probe-v2` adds a command-driven SPI slave fixture while
+  preserving the GPIO probe protocol.
+- SPI fixture pins:
+  - C3 GPIO4: SCLK input from S3 GPIO10.
+  - C3 GPIO5: MOSI input from S3 GPIO11.
+  - C3 GPIO6: MISO output to S3 GPIO12.
+  - C3 GPIO7: CS input from S3 GPIO13.
+- `SPI START` releases all GPIO probe pins to input first, then initializes C3
+  `SPI2_HOST` as an SPI mode-0 DMA slave with a maximum scripted transfer
+  length of 256 bytes. DMA is needed because ESP-IDF's non-DMA SPI slave path is
+  limited to the hardware FIFO size, 64 bytes.
+- `SPI XFER <len> [timeout_ms]` arms exactly one SPI slave transaction. The C3
+  sends a fixed MISO pattern `a0 a1 ...` and records the MOSI bytes received
+  from the S3. The command response includes both `rx=<hex>` and `tx=<hex>` so
+  the host script can verify both directions.
+- Linux `spi-dln2` only registers a SPI controller. A `/dev/spidev*` node
+  appears only after some SPI child device is registered on that controller.
+- `tools/spi_test_device` contains a temporary lab-only kernel module that finds the
+  bound `dln2-spi` platform device, retrieves its `spi_controller`, and calls
+  `spi_new_device()` with modalias `dh2228fv`, one of the SPI IDs accepted by
+  the mainline `spidev` driver.
+- A generic `spidev` modalias can leave `spi0.0` present but unbound on this
+  host. Use the helper default `dh2228fv` unless debugging the binding path.
+- Loading the temporary SPI test device:
+  `sudo modprobe spidev`
+  `sudo insmod tools/spi_test_device/spi_dln2_spidev_test.ko bus_num=0 chip_select=0 max_speed_hz=100000`
+- If the generated `/dev/spidev0.0` is root-only, use
+  `sudo chmod a+rw /dev/spidev0.0` for this temporary lab session.
+- Run the SPI fixture test with:
+  `./scripts/spi_c3_slave_test.py --c3 /dev/ttyACM2 --spidev /dev/spidev0.0 --length 16 --speed 100000`
+- Verified SPI fixture matrix: 10 kHz, 100 kHz, 500 kHz, and 1 MHz at transfer
+  lengths 1, 4, 16, and 64 bytes all passed.
+- After switching both S3 SPI master and C3 SPI slave paths to DMA mode,
+  256-byte transfers pass at 100 kHz and 1 MHz. This covers the advertised
+  Linux `spi-dln2` maximum transfer size.
+- Reflashing or unplugging the S3 DLN-2 USB device removes any temporary
+  `spidev0.0` child created by `tools/spi_test_device`; reload the helper after
+  the new `/sys/class/spi_master/spi0` appears.
+- Remove the temporary SPI child after testing with:
+  `sudo rmmod spi_dln2_spidev_test`
+- Do not use the first-generation `spi_test_device.ko` after a S3 USB
+  re-enumeration. It can retain a stale `spi_device` pointer and fault on
+  unload. The current replacement helper is `spi_dln2_spidev_test.ko`.
 
 ## Verification Notes
 

@@ -8,14 +8,23 @@
 #include <unistd.h>
 
 #include "driver/gpio.h"
+#include "driver/spi_slave.h"
 #include "driver/usb_serial_jtag.h"
 #include "driver/usb_serial_jtag_vfs.h"
+#include "esp_attr.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#define C3_TEST_VERSION "c3-gpio-probe-v1"
+#define C3_TEST_VERSION "c3-probe-v2"
 #define MAX_LINE_LEN 128
+#define SPI_TEST_HOST SPI2_HOST
+#define SPI_TEST_SCLK_GPIO GPIO_NUM_4
+#define SPI_TEST_MOSI_GPIO GPIO_NUM_5
+#define SPI_TEST_MISO_GPIO GPIO_NUM_6
+#define SPI_TEST_CS_GPIO GPIO_NUM_7
+#define SPI_TEST_MAX_BYTES 256
+#define SPI_TEST_DEFAULT_TIMEOUT_MS 5000
 
 static const gpio_num_t s_channels[] = {
     GPIO_NUM_0,
@@ -33,6 +42,15 @@ static const gpio_num_t s_channels[] = {
 
 static uint32_t s_output_enable_mask;
 static uint32_t s_output_value_mask;
+static bool s_spi_active;
+static uint32_t s_spi_xfer_count;
+static uint32_t s_spi_last_len;
+DMA_ATTR static uint8_t s_spi_last_rx[SPI_TEST_MAX_BYTES];
+DMA_ATTR static uint8_t s_spi_last_tx[SPI_TEST_MAX_BYTES];
+DMA_ATTR static uint8_t s_spi_rx_buf[SPI_TEST_MAX_BYTES];
+DMA_ATTR static uint8_t s_spi_tx_buf[SPI_TEST_MAX_BYTES];
+
+static esp_err_t set_inputs(uint32_t mask);
 
 static esp_err_t configure_console_io(void)
 {
@@ -107,6 +125,118 @@ static bool parse_u32(char **cursor, uint32_t *value)
 static uint32_t sanitize_mask(uint32_t mask)
 {
     return mask & ALL_CHANNELS_MASK;
+}
+
+static void spi_test_fill_tx(uint32_t len)
+{
+    for (uint32_t i = 0; i < len; i++) {
+        s_spi_tx_buf[i] = (uint8_t)(0xa0U + (i & 0x3fU));
+    }
+}
+
+static void print_hex(const uint8_t *buf, uint32_t len)
+{
+    static const char hex[] = "0123456789abcdef";
+
+    for (uint32_t i = 0; i < len; i++) {
+        putchar(hex[buf[i] >> 4]);
+        putchar(hex[buf[i] & 0x0f]);
+    }
+}
+
+static esp_err_t spi_test_stop(void)
+{
+    if (!s_spi_active) {
+        return ESP_OK;
+    }
+
+    esp_err_t err = spi_slave_free(SPI_TEST_HOST);
+    if (err == ESP_OK) {
+        s_spi_active = false;
+        set_inputs(ALL_CHANNELS_MASK);
+    }
+    return err;
+}
+
+static esp_err_t spi_test_start(void)
+{
+    if (s_spi_active) {
+        return ESP_OK;
+    }
+
+    esp_err_t err = set_inputs(ALL_CHANNELS_MASK);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    spi_bus_config_t buscfg = {
+        .mosi_io_num = SPI_TEST_MOSI_GPIO,
+        .miso_io_num = SPI_TEST_MISO_GPIO,
+        .sclk_io_num = SPI_TEST_SCLK_GPIO,
+        .quadwp_io_num = -1,
+        .quadhd_io_num = -1,
+        .max_transfer_sz = SPI_TEST_MAX_BYTES,
+    };
+    spi_slave_interface_config_t slvcfg = {
+        .spics_io_num = SPI_TEST_CS_GPIO,
+        .flags = 0,
+        .queue_size = 1,
+        .mode = 0,
+    };
+
+    gpio_set_pull_mode(SPI_TEST_MOSI_GPIO, GPIO_PULLUP_ONLY);
+    gpio_set_pull_mode(SPI_TEST_SCLK_GPIO, GPIO_PULLUP_ONLY);
+    gpio_set_pull_mode(SPI_TEST_CS_GPIO, GPIO_PULLUP_ONLY);
+
+    err = spi_slave_initialize(SPI_TEST_HOST, &buscfg, &slvcfg,
+                               SPI_DMA_CH_AUTO);
+    if (err == ESP_OK) {
+        s_spi_active = true;
+        s_spi_last_len = 0;
+        s_spi_xfer_count = 0;
+    }
+    return err;
+}
+
+static esp_err_t spi_test_xfer(uint32_t len, uint32_t timeout_ms)
+{
+    if (!s_spi_active) {
+        esp_err_t err = spi_test_start();
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+
+    if (len == 0 || len > SPI_TEST_MAX_BYTES) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    memset(s_spi_rx_buf, 0, sizeof(s_spi_rx_buf));
+    memset(s_spi_tx_buf, 0, sizeof(s_spi_tx_buf));
+    spi_test_fill_tx(len);
+
+    spi_slave_transaction_t trans = {
+        .length = len * 8,
+        .tx_buffer = s_spi_tx_buf,
+        .rx_buffer = s_spi_rx_buf,
+    };
+
+    esp_err_t err = spi_slave_transmit(SPI_TEST_HOST, &trans,
+                                       pdMS_TO_TICKS(timeout_ms));
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    uint32_t actual_len = (uint32_t)((trans.trans_len + 7) / 8);
+    if (actual_len > SPI_TEST_MAX_BYTES) {
+        actual_len = SPI_TEST_MAX_BYTES;
+    }
+
+    memcpy(s_spi_last_rx, s_spi_rx_buf, actual_len);
+    memcpy(s_spi_last_tx, s_spi_tx_buf, actual_len);
+    s_spi_last_len = actual_len;
+    s_spi_xfer_count++;
+    return ESP_OK;
 }
 
 static esp_err_t channel_input(uint32_t channel)
@@ -207,8 +337,22 @@ static void print_map(void)
 static void print_status(void)
 {
     printf("OK STATUS mode=0x%02" PRIx32 " out=0x%02" PRIx32
-           " read=0x%02" PRIx32 "\n",
-           s_output_enable_mask, s_output_value_mask, read_mask());
+           " read=0x%02" PRIx32 " spi=%s spi_count=%" PRIu32
+           " spi_len=%" PRIu32 "\n",
+           s_output_enable_mask, s_output_value_mask, read_mask(),
+           s_spi_active ? "on" : "off", s_spi_xfer_count, s_spi_last_len);
+}
+
+static void print_spi_status(void)
+{
+    printf("OK SPI STATUS active=%" PRIu32 " count=%" PRIu32 " len=%" PRIu32
+           " rx=",
+           (uint32_t)(s_spi_active ? 1 : 0), s_spi_xfer_count,
+           s_spi_last_len);
+    print_hex(s_spi_last_rx, s_spi_last_len);
+    printf(" tx=");
+    print_hex(s_spi_last_tx, s_spi_last_len);
+    printf("\n");
 }
 
 static void process_line(char *line)
@@ -246,13 +390,83 @@ static void process_line(char *line)
     }
 
     if (strcmp(cmd, "RESET") == 0) {
-        esp_err_t err = set_inputs(ALL_CHANNELS_MASK);
+        esp_err_t err = spi_test_stop();
+        if (err == ESP_OK) {
+            err = set_inputs(ALL_CHANNELS_MASK);
+        }
         if (err != ESP_OK) {
             printf("ERR RESET %s\n", esp_err_to_name(err));
             return;
         }
         s_output_value_mask = 0;
         printf("OK RESET\n");
+        return;
+    }
+
+    if (strcmp(cmd, "SPI") == 0) {
+        char *subcmd = next_token(&cursor);
+        if (!subcmd) {
+            printf("ERR SPI expected-subcommand\n");
+            return;
+        }
+
+        for (char *p = subcmd; *p; p++) {
+            *p = (char)toupper((unsigned char)*p);
+        }
+
+        if (strcmp(subcmd, "START") == 0) {
+            esp_err_t err = spi_test_start();
+            if (err != ESP_OK) {
+                printf("ERR SPI START %s\n", esp_err_to_name(err));
+                return;
+            }
+            printf("OK SPI START sclk=%d mosi=%d miso=%d cs=%d max=%d\n",
+                   (int)SPI_TEST_SCLK_GPIO, (int)SPI_TEST_MOSI_GPIO,
+                   (int)SPI_TEST_MISO_GPIO, (int)SPI_TEST_CS_GPIO,
+                   SPI_TEST_MAX_BYTES);
+            return;
+        }
+
+        if (strcmp(subcmd, "STOP") == 0) {
+            esp_err_t err = spi_test_stop();
+            if (err != ESP_OK) {
+                printf("ERR SPI STOP %s\n", esp_err_to_name(err));
+                return;
+            }
+            printf("OK SPI STOP\n");
+            return;
+        }
+
+        if (strcmp(subcmd, "STATUS") == 0) {
+            print_spi_status();
+            return;
+        }
+
+        if (strcmp(subcmd, "XFER") == 0) {
+            uint32_t len;
+            uint32_t timeout_ms = SPI_TEST_DEFAULT_TIMEOUT_MS;
+            if (!parse_u32(&cursor, &len)) {
+                printf("ERR SPI XFER expected-len\n");
+                return;
+            }
+            parse_u32(&cursor, &timeout_ms);
+
+            esp_err_t err = spi_test_xfer(len, timeout_ms);
+            if (err != ESP_OK) {
+                printf("ERR SPI XFER %s\n", esp_err_to_name(err));
+                return;
+            }
+
+            printf("OK SPI XFER count=%" PRIu32 " len=%" PRIu32 " rx=",
+                   s_spi_xfer_count, s_spi_last_len);
+            print_hex(s_spi_last_rx, s_spi_last_len);
+            printf(" tx=");
+            print_hex(s_spi_last_tx, s_spi_last_len);
+            printf("\n");
+            return;
+        }
+
+        printf("ERR SPI unknown-subcommand\n");
         return;
     }
 
@@ -329,7 +543,7 @@ static void process_line(char *line)
     }
 
     if (strcmp(cmd, "HELP") == 0) {
-        printf("OK HELP PING MAP STATUS READ RESET IN <mask> DRIVE <mask> <value> PULSE <mask> <count> <high_ms> <low_ms>\n");
+        printf("OK HELP PING MAP STATUS READ RESET IN <mask> DRIVE <mask> <value> PULSE <mask> <count> <high_ms> <low_ms> SPI START|STOP|STATUS|XFER <len> [timeout_ms]\n");
         return;
     }
 
