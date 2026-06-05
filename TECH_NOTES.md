@@ -55,6 +55,11 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   - endpoint `0x01` bulk OUT
   - endpoint `0x81` bulk IN
   - full-speed endpoint packet size 64 bytes
+- Vendor OUT requests are framed by the DLN-2 header `size` field. The TinyUSB
+  RX callback can deliver a partial request or multiple back-to-back requests,
+  so the firmware accumulates bytes until one full DLN-2 frame is available and
+  then dispatches it. Invalid frame sizes are dropped and the accumulator is
+  reset.
 
 ## Implemented GPIO Map
 
@@ -172,6 +177,8 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   debugging native USB enumeration.
 - Always respond to unknown DLN-2 commands with an error packet. Linux timeouts
   make protocol debugging much slower than explicit errors.
+- Do not assume one USB vendor RX callback equals one DLN-2 request. USB bulk
+  transfers preserve byte order, not application message boundaries.
 - Keep DLN-2 line numbers separate from ESP32-S3 GPIO numbers through a fixed
   mapping table.
 - ESP-IDF monitor requires a TTY. Running it through a normal pipe fails with

@@ -22,6 +22,7 @@ USB GPIO device.
 - [x] M9: Add an ESP32-C3 based external GPIO probe firmware and host
       closed-loop test harness.
 - [x] M10: Validate the C3 closed-loop probe against the S3 DLN-2 GPIO device.
+- [x] M11: Harden DLN-2 USB bulk OUT request framing.
 
 ## Log
 
@@ -51,6 +52,17 @@ USB GPIO device.
   - C3 output, observed by S3 input through Linux `gpiod`.
   - C3 pulse generation on each selected channel, observed by Linux `gpiomon`
     edge events.
+- Hardened the S3 USB vendor OUT path so it accumulates DLN-2 request frames by
+  the header `size` field instead of treating one TinyUSB RX callback as one
+  complete request.
+- Rebuilt and flashed the S3 firmware with the framed RX path to `/dev/ttyACM1`.
+- Verified after flashing:
+  - `lsusb -d a257:2013` reports `Diolan DLN-2 USB GPIO`.
+  - `gpiodetect` reports `gpiochip2 [dln2] (18 lines)`.
+  - `gpioinfo -c ... 0..17` reports all 18 exported lines as inputs.
+  - `gpioget -c ... --numeric 0..17` succeeds.
+  - The C3 closed-loop test on S3 lines 0-6 passes S3-output, C3-output, and
+    per-line `gpiomon` event checks.
 
 ### 2026-06-04
 
