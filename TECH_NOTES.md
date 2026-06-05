@@ -327,12 +327,18 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - The script uses the Linux `i2c-dev` `I2C_SLAVE` ioctl plus raw `read()` and
   `write()` calls, so it exercises the mainline `i2c-dln2` `READ` and `WRITE`
   command paths instead of bypassing the kernel driver.
+- The C3 USB-Serial/JTAG path can need a short settling period after opening
+  the TTY. The I2C script now waits after open and retries `PING` before
+  starting the fixture.
 - Current Codex shell processes still do not list group `i2c` in `id`, while
   `/dev/i2c-4` is `root:i2c 660`. Run the script through `sg i2c -c ...`, a
   `newgrp i2c` shell, or `sudo` if direct access fails.
 - Short I2C wires may work with the internal pullups currently enabled on the
   S3 master bus, but external pullups around 4.7 kOhm from SDA/SCL to 3V3 are
   the more robust lab setup. Do not pull the bus up to 5 V.
+- The C3 fixture has validated Linux `i2c-dln2` transfers at 100 kHz for 1,
+  4, 16, 64, and 256 byte raw writes and reads. This covers the current
+  firmware maximum transfer length.
 
 ## Verification Notes
 

@@ -27,10 +27,12 @@ def configure_serial(fd):
 
 
 class C3Console:
-    def __init__(self, path):
+    def __init__(self, path, open_delay):
         self.fd = os.open(path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
         configure_serial(self.fd)
         self.buf = b""
+        time.sleep(open_delay)
+        termios.tcflush(self.fd, termios.TCIFLUSH)
 
     def close(self):
         os.close(self.fd)
@@ -64,14 +66,28 @@ class C3Console:
 
     def command(self, line, timeout=2.0):
         self.write(line)
+        seen = []
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             got = self.read_line(timeout=0.1)
             if got is None:
                 continue
+            seen.append(got)
             if got.startswith("OK ") or got.startswith("ERR "):
                 return got
-        raise TimeoutError(f"no response for {line!r}")
+        raise TimeoutError(f"no response for {line!r}; seen={seen!r}")
+
+    def sync(self, attempts):
+        last_error = None
+        for _ in range(attempts):
+            try:
+                return self.command("PING", timeout=1.5)
+            except TimeoutError as exc:
+                last_error = exc
+                self.buf = b""
+                termios.tcflush(self.fd, termios.TCIFLUSH)
+                time.sleep(0.3)
+        raise TimeoutError(f"C3 did not answer PING after {attempts} attempts; last={last_error}")
 
 
 def find_dln2_i2c_dev():
@@ -158,6 +174,8 @@ def main():
     parser.add_argument("--addr", type=lambda x: int(x, 0), default=DEFAULT_I2C_ADDR, help="7-bit C3 I2C slave address")
     parser.add_argument("--lengths", default="1 4 16 64 256", help="space-separated transfer lengths")
     parser.add_argument("--timeout", type=float, default=3.0, help="timeout in seconds for C3 RX completion")
+    parser.add_argument("--open-delay", type=float, default=1.0, help="delay after opening the C3 serial port")
+    parser.add_argument("--sync-attempts", type=int, default=5, help="number of PING attempts used to synchronize with C3")
     args = parser.parse_args()
 
     if args.addr < 1 or args.addr > 0x7f:
@@ -167,10 +185,10 @@ def main():
     lengths = parse_lengths(args.lengths)
     print(f"i2c_dev={i2c_dev} c3={args.c3} addr=0x{args.addr:02x} lengths={lengths}")
 
-    c3 = C3Console(args.c3)
+    c3 = C3Console(args.c3, args.open_delay)
     try:
         c3.drain()
-        print(c3.command("PING"))
+        print(c3.sync(args.sync_attempts))
         print(c3.command(f"I2C START 0x{args.addr:02x}"))
 
         ok = True

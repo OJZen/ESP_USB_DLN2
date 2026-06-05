@@ -47,7 +47,7 @@ USB GPIO device.
 - [x] M24: Resolve and verify the remaining SPI mode-3 behavior.
 - [x] M25: Add an ESP32-C3 I2C slave fixture and host-side Linux `i2c-dln2`
       read/write test tooling.
-- [ ] M26: Validate DLN-2 I2C runtime transfers against the C3 fixture.
+- [x] M26: Validate DLN-2 I2C runtime transfers against the C3 fixture.
 
 ## Log
 
@@ -360,8 +360,20 @@ USB GPIO device.
     responses.
 - Confirmed the Linux DLN-2 I2C adapter is still present as `/dev/i2c-4` with
   name `dln2-i2c-3-2.1.2:1.0-0`.
-- I2C transfer validation is pending the physical I2C wiring between S3
-  GPIO38/GPIO47 and C3 GPIO0/GPIO1.
+- User wired the I2C fixture with S3 GPIO38 to C3 GPIO0 for SDA, S3 GPIO47 to
+  C3 GPIO1 for SCL, common ground, and 3V3 pullups.
+- Reflashed `c3-probe-v4` to `/dev/ttyACM2` after reconnecting the C3 host
+  USB path; esptool again identified MAC `cc:8d:a2:c2:88:2c`.
+- Verified C3 responds on `/dev/ttyACM2` with
+  `OK PONG c3-probe-v4 channels=8`.
+- Ran the Linux I2C runtime fixture test:
+  `sg i2c -c './scripts/i2c_c3_slave_test.py --c3 /dev/ttyACM2 --i2c-dev /dev/i2c-4 --addr 0x52 --lengths "1 4 16 64 256"'`.
+- Verified DLN-2 I2C write and read transfers at lengths 1, 4, 16, 64, and
+  256 bytes. Host writes were captured by the C3 fixture, host reads matched
+  the C3 preloaded pattern, and the script reported `PASS I2C transfer matrix`.
+- Hardened the I2C host script's C3 serial synchronization with an open delay
+  and repeated `PING` attempts, matching the behavior needed by the GPIO probe
+  script on USB-Serial/JTAG devices.
 
 ### 2026-06-04
 
