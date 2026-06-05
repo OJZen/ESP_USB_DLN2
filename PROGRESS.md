@@ -302,8 +302,14 @@ USB GPIO device.
   all passed. Linux SPI statistics reported `messages=17` and `errors=0`.
 - Hardened the S3 SPI reconfiguration failure path so a failed ESP-IDF
   re-add leaves the DLN-2 SPI port disabled rather than enabled with a null
-  SPI device handle. This guard is build-verified in the S3 firmware and will
-  be present after the next S3 flash.
+  SPI device handle.
+- Flashed the S3 firmware containing the SPI reconfiguration guard to
+  `/dev/ttyACM1`. The flashed app version is `f0a7183`.
+- Verified after the S3 flash:
+  - `lsusb -d a257:2013` reports the DLN-2 compatible USB device.
+  - `gpiodetect` reports `gpiochip2 [dln2] (10 lines)`.
+  - `/sys/class/spi_master/spi0` resolves to the `dln2-spi` child path.
+  - `/sys/bus/iio/devices/iio:device0/name` reports `dln2-adc`.
 - SPI mode 3 still fails against the current C3 fixture. The observed failure
   is a one-bit/byte alignment mismatch where the C3 reports a 17-byte transfer
   for a requested 16-byte transaction. Treat mode 3 as unresolved rather than
