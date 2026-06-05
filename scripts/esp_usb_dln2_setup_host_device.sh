@@ -129,7 +129,7 @@ setup_iio_perms() {
         while IFS= read -r path; do
             set_path_group_rw "$path"
         done < <(
-            find "$dev" -maxdepth 3 -type f \( \
+            find -H "$dev" -maxdepth 3 -type f \( \
                 -name 'in_voltage*_raw' -o \
                 -name 'sampling_frequency' -o \
                 -name 'current_trigger' -o \

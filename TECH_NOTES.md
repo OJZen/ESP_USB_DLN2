@@ -417,6 +417,11 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   USB presence, GPIO by-id link, DLN-2 I2C adapter, DLN-2 SPI master, the exact
   `/dev/spidev<dln2-bus>.<configured-cs>` node, DLN-2 IIO ADC, and basic
   read/write permissions.
+- IIO devices under `/sys/bus/iio/devices/iio:deviceX` are symlinks on this
+  host. Permission repair for buffer controls must either use `find -H` or
+  resolve the symlink before scanning; plain `find "$dev"` only sees the
+  symlink itself and misses `buffer/enable`, `buffer/length`, and
+  `scan_elements/*_en`.
 
 ## Verification Notes
 

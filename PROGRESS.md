@@ -459,6 +459,13 @@ USB GPIO device.
   - `udevadm test` verified that the new rule grants `plugdev`/`0660`
     permissions after the host's `99-jlink-cmsis-dap.rules`, and that USB,
     `dln2-spi`, and `dln2-adc` add events request the setup service.
+- After installing the host support package, `esp-usb-dln2-check` reported
+  GPIO, I2C, SPI spidev, and the IIO character device as user-accessible, but
+  warned that IIO buffer sysfs controls were still root-only. Root cause: the
+  setup script scanned `/sys/bus/iio/devices/iio:deviceX`, which is a symlink,
+  with plain `find`; GNU find does not descend into command-line symlink
+  directories unless requested. Changed the scan to `find -H` so buffer and
+  scan element attributes are included.
 
 ### 2026-06-04
 
