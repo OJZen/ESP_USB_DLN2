@@ -9,6 +9,7 @@ static const char *TAG = "dln2";
 
 void dln2_init(void)
 {
+    dln2_pin_init();
     dln2_gpio_init();
 }
 

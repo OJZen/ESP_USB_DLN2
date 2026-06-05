@@ -52,7 +52,13 @@ minimal command coverage and resource ownership.
 
 ## Resource Ownership
 
-Before enabling I2C/SPI/ADC, add a central pin ownership layer similar to
+Current state:
+
+- A central pin ownership layer exists in `components/dln2/dln2_pin.c`.
+- Existing GPIO enable/disable paths claim and release their physical
+  ESP32-S3 pins.
+
+Before enabling I2C/SPI/ADC, keep extending this layer similar to
 `pico-usb-io-board/dln2-pin.c`.
 
 Requirements:

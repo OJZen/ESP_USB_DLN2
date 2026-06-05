@@ -26,6 +26,8 @@ USB GPIO device.
 - [x] M12: Reduce output-direction switching glitches.
 - [x] M13: Derive the GPIO IRQ, I2C, SPI, and ADC implementation plan from
       Linux DLN-2 subdrivers and the `pico-usb-io-board` device reference.
+- [x] M14: Add central ESP32-S3 pin ownership tracking and route GPIO
+      enable/disable through it.
 
 ## Log
 
@@ -82,6 +84,21 @@ USB GPIO device.
   and enables all exported GPIO lines, so peripheral pins must either be
   removed from the exported GPIO map or rejected cleanly as owned by another
   module.
+- Added `components/dln2/dln2_pin.c`, a central ESP32-S3 physical pin ownership
+  table modeled after the `pico-usb-io-board` approach.
+- The ownership table marks the known occupied/high-risk pins unavailable and
+  supports module owners for GPIO, I2C, SPI, and ADC.
+- Updated `DLN2_GPIO_PIN_ENABLE` and `DLN2_GPIO_PIN_DISABLE` so GPIO lines claim
+  and release their mapped physical ESP32-S3 GPIO pins.
+- Rebuilt and flashed the S3 firmware to `/dev/ttyACM1`.
+- Verified after the pin ownership change:
+  - `lsusb -d a257:2013` reports `Diolan DLN-2 USB GPIO`.
+  - `gpiodetect` reports `gpiochip2 [dln2] (18 lines)`.
+  - `gpioinfo` reports all 18 lines as inputs.
+  - `gpioget` on lines 0-17 succeeds.
+  - `gpioset` on line 17 succeeds.
+  - `gpiomon` can request events on line 17.
+  - The C3 closed-loop test still passes for wired lines 0-6.
 
 ### 2026-06-04
 

@@ -69,6 +69,21 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   `DISABLE`, and `CHANNEL_DISABLE`. The Linux driver sends value `10` in the
   second byte of `SET_RESOLUTION`; despite the struct field name, this is the
   requested ADC resolution in bits.
+- The firmware now has a central ESP32-S3 physical pin ownership table. GPIO
+  enable claims the line's physical GPIO as module `0x01`; GPIO disable releases
+  it. Future I2C/SPI/ADC enable paths must claim their physical pins before
+  configuring ESP-IDF peripherals.
+- Ownership conflicts should return DLN-2 result codes rather than silently
+  reconfiguring pins:
+  - `DLN2_RES_PIN_IN_USE` for a physical pin claimed by another module.
+  - `DLN2_RES_PIN_NOT_CONNECTED_TO_MODULE` for unavailable pins or release by
+    the wrong module.
+  - `DLN2_RES_INVALID_PIN_NUMBER`, `DLN2_RES_INVALID_PORT_NUMBER`, and
+    `DLN2_RES_INVALID_CHANNEL_NUMBER` for bad addressing.
+- Because Linux currently enables all exported GPIO lines during `gpio-dln2`
+  probe, any physical pin needed by a real I2C/SPI/ADC peripheral must be
+  removed from the exported GPIO map before that peripheral can probe
+  successfully.
 
 ## Implemented USB Shape
 

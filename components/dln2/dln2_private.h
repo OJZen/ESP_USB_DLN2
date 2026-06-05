@@ -8,6 +8,9 @@
 
 #define DLN2_MODULE_GENERIC 0x00
 #define DLN2_MODULE_GPIO    0x01
+#define DLN2_MODULE_SPI     0x02
+#define DLN2_MODULE_I2C     0x03
+#define DLN2_MODULE_ADC     0x06
 
 #define DLN2_CMD_GET_DEVICE_VER DLN2_CMD(0x30, DLN2_MODULE_GENERIC)
 #define DLN2_CMD_GET_DEVICE_SN  DLN2_CMD(0x31, DLN2_MODULE_GENERIC)
@@ -21,7 +24,11 @@
 #define DLN2_RES_INVALID_MESSAGE_SIZE  0x8a
 #define DLN2_RES_INVALID_HANDLE        0x8f
 #define DLN2_RES_NOT_IMPLEMENTED       0x91
+#define DLN2_RES_PIN_IN_USE            0xa5
+#define DLN2_RES_INVALID_PORT_NUMBER   0xa8
+#define DLN2_RES_PIN_NOT_CONNECTED_TO_MODULE 0xaa
 #define DLN2_RES_INVALID_PIN_NUMBER    0xab
+#define DLN2_RES_INVALID_CHANNEL_NUMBER 0xc0
 #define DLN2_RES_INVALID_VALUE         0xe2
 
 typedef enum {
@@ -87,6 +94,12 @@ size_t dln2_make_response(const dln2_request_t *request, uint16_t result,
                           uint8_t *response, size_t response_cap);
 size_t dln2_make_event(uint16_t id, uint16_t echo, const void *payload,
                        size_t payload_len, uint8_t *event, size_t event_cap);
+
+void dln2_pin_init(void);
+uint16_t dln2_pin_claim(int gpio, uint8_t module);
+uint16_t dln2_pin_release(int gpio, uint8_t module);
+bool dln2_pin_is_claimed(int gpio, uint8_t module);
+const char *dln2_module_name(uint8_t module);
 
 void dln2_gpio_init(void);
 size_t dln2_gpio_handle_request(const dln2_request_t *request,

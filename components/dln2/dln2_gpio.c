@@ -233,6 +233,12 @@ static size_t gpio_pin_enable(const dln2_request_t *request, bool enable,
     get_line(pin, &line);
 
     if (enable) {
+        result = dln2_pin_claim(line->gpio, DLN2_MODULE_GPIO);
+        if (result != DLN2_RES_SUCCESS) {
+            return dln2_make_response(request, result, NULL, 0, response,
+                                      response_cap);
+        }
+
         gpio_config_t cfg = {
             .pin_bit_mask = 1ULL << line->gpio,
             .mode = GPIO_MODE_INPUT,
@@ -244,13 +250,24 @@ static size_t gpio_pin_enable(const dln2_request_t *request, bool enable,
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "gpio_config GPIO%d failed: %s", line->gpio,
                      esp_err_to_name(err));
+            dln2_pin_release(line->gpio, DLN2_MODULE_GPIO);
             return dln2_make_response(request, DLN2_RES_FAIL, NULL, 0,
                                       response, response_cap);
         }
         line->enabled = true;
         line->is_output = false;
         line->out_value = false;
-        gpio_event_update(pin, line);
+        err = gpio_event_update(pin, line);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "gpio_event_update GPIO%d failed: %s", line->gpio,
+                     esp_err_to_name(err));
+            gpio_reset_pin(line->gpio);
+            line->enabled = false;
+            line->event_type = DLN2_GPIO_EVENT_NONE;
+            dln2_pin_release(line->gpio, DLN2_MODULE_GPIO);
+            return dln2_make_response(request, DLN2_RES_FAIL, NULL, 0,
+                                      response, response_cap);
+        }
     } else {
         gpio_event_disable(line);
         gpio_reset_pin(line->gpio);
@@ -261,6 +278,11 @@ static size_t gpio_pin_enable(const dln2_request_t *request, bool enable,
         line->event_period_ms = 0;
         line->event_have_last_value = false;
         line->event_last_emit_us = 0;
+        result = dln2_pin_release(line->gpio, DLN2_MODULE_GPIO);
+        if (result != DLN2_RES_SUCCESS) {
+            return dln2_make_response(request, result, NULL, 0, response,
+                                      response_cap);
+        }
     }
 
     ESP_LOGI(TAG, "pin %u GPIO%d %s", pin, line->gpio,
@@ -281,7 +303,8 @@ static uint16_t require_enabled_line(const dln2_request_t *request,
     }
 
     get_line(*pin, line);
-    if (!(*line)->enabled) {
+    if (!(*line)->enabled ||
+        !dln2_pin_is_claimed((*line)->gpio, DLN2_MODULE_GPIO)) {
         return DLN2_RES_INVALID_PIN_NUMBER;
     }
 
