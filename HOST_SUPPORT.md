@@ -26,7 +26,7 @@ esp-usb-dln2-check
 
 The install provides:
 
-- `/etc/udev/rules.d/99-esp-usb-dln2.rules`
+- `/etc/udev/rules.d/99-zz-esp-usb-dln2.rules`
 - `/etc/systemd/system/esp-usb-dln2-spi.service`
 - `/etc/esp_usb_dln2/host.conf`
 - `/usr/local/lib/esp_usb_dln2/spi_dln2_spidev_test.ko`
@@ -37,7 +37,7 @@ Expected usable devices after plug-in:
 
 - `/dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00`
 - a `/dev/i2c-X` adapter whose name starts with `dln2-i2c-`
-- `/dev/spidev0.0` for lab SPI userspace access
+- a `/dev/spidevX.0` node on the DLN-2 SPI bus for lab SPI userspace access
 - `/dev/iio:deviceX` whose IIO name is `dln2-adc`
 
 The SPI helper is a host-side registrar for a temporary `spidev` child on the
@@ -46,7 +46,7 @@ models SPI controllers and SPI child devices separately. The firmware can
 provide the controller, but Linux still needs a described SPI child before it
 creates a `spidev` node.
 
-If `/dev/spidev0.0` is missing after replug:
+If the DLN-2 `/dev/spidevX.0` node is missing after replug:
 
 ```bash
 sudo systemctl start esp-usb-dln2-spi.service

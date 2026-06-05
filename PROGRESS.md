@@ -430,24 +430,35 @@ USB GPIO device.
 - Added a host support package intended to make normal use a one-time install
   followed by plug-and-use:
   - `scripts/install_host_support.sh` builds and installs the SPI helper for
-    the running kernel, installs udev rules, installs a systemd oneshot, and
-    installs a readiness check command.
-  - `host_support/99-esp-usb-dln2.rules.in` grants access to DLN-2 GPIO, I2C,
-    IIO, and spidev nodes and triggers the setup service when the USB device
-    is plugged in.
+    the running kernel in a temporary directory, installs udev rules, installs
+    a systemd oneshot, and installs a readiness check command.
+  - `host_support/99-zz-esp-usb-dln2.rules.in` grants access to DLN-2 GPIO,
+    I2C, IIO, and spidev nodes and triggers the setup service when the USB
+    device, `dln2-spi` platform device, or `dln2-adc` IIO device appears.
   - `host_support/esp-usb-dln2-spi.service` runs the host setup script from
     systemd/udev.
   - `scripts/esp_usb_dln2_setup_host_device.sh` finds the Linux `dln2-spi`
     master, reloads stale `spi_dln2_spidev_test` state if needed, registers
-    the `spidev` child, and adjusts DLN-2 device permissions.
+    the `spidev` child, and repeatedly adjusts DLN-2 device permissions while
+    udev-created nodes settle.
   - `scripts/check_device_ready.sh` reports whether USB, GPIO, I2C, SPI, and
-    IIO nodes are present and accessible.
+    IIO nodes are present and accessible, and now checks the exact DLN-2
+    `/dev/spidev<bus>.<cs>` node instead of accepting any host spidev device.
 - Added `HOST_SUPPORT.md` documenting the one-time install flow:
   `sudo ./scripts/install_host_support.sh`, then `esp-usb-dln2-check`.
 - Validated host support scripts with `bash -n` and `git diff --check`.
 - Ran the readiness check before installing host support. It correctly reports
   the current lab state: USB/GPIO/I2C/SPI-master/IIO are present, while spidev
   and IIO/I2C user permissions still need the host support install.
+- Re-audited the host support scripts and fixed install/use friction:
+  - Renamed the installed udev rule to `99-zz-esp-usb-dln2.rules` so it applies
+    after later generic rules on this host.
+  - The installer removes the old `99-esp-usb-dln2.rules` path if present.
+  - The installer now reports a failed service start instead of silently
+    continuing.
+  - `udevadm test` verified that the new rule grants `plugdev`/`0660`
+    permissions after the host's `99-jlink-cmsis-dap.rules`, and that USB,
+    `dln2-spi`, and `dln2-adc` add events request the setup service.
 
 ### 2026-06-04
 

@@ -142,6 +142,33 @@ setup_iio_perms() {
     done
 }
 
+setup_spidev_perms() {
+    local bus dev
+
+    if ! bus="$(find_dln2_spi_bus)"; then
+        return 0
+    fi
+
+    dev="/dev/spidev${bus}.${SPI_CS}"
+    set_node_perms "$dev"
+}
+
+setup_current_perms() {
+    setup_gpio_perms
+    setup_i2c_perms
+    setup_iio_perms
+    setup_spidev_perms
+}
+
+settle_current_perms() {
+    local _
+
+    for _ in $(seq 1 20); do
+        setup_current_perms
+        sleep 0.1
+    done
+}
+
 setup_spi_child() {
     local bus dev spi_sys
 
@@ -201,10 +228,9 @@ main() {
     fi
 
     normalize_group
-    setup_gpio_perms
-    setup_i2c_perms
-    setup_iio_perms
+    setup_current_perms
     setup_spi_child
+    settle_current_perms
 }
 
 main "$@"

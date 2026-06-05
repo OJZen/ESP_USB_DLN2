@@ -394,12 +394,14 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   controller. The host support package keeps that policy boundary explicit and
   provides a host-side SPI child registrar.
 - `scripts/install_host_support.sh` is the intended one-time setup entrypoint.
-  It must run as root, builds `tools/spi_test_device/spi_dln2_spidev_test.ko`
-  against the running kernel, copies it to `/usr/local/lib/esp_usb_dln2/`, and
-  installs udev/systemd support files.
-- `host_support/99-esp-usb-dln2.rules.in` matches VID/PID `a257:2013` and
-  triggers `esp-usb-dln2-spi.service` on USB add. It also sets permissions for
-  DLN-2 GPIO, I2C, IIO, and spidev nodes.
+  It must run as root, builds `spi_dln2_spidev_test.ko` in a temporary build
+  directory against the running kernel, copies it to
+  `/usr/local/lib/esp_usb_dln2/`, and installs udev/systemd support files.
+- `host_support/99-zz-esp-usb-dln2.rules.in` matches VID/PID `a257:2013` and
+  triggers `esp-usb-dln2-spi.service` on USB add, `dln2-spi` platform add, and
+  `dln2-adc` IIO add. It also sets permissions for DLN-2 GPIO, I2C, IIO, and
+  spidev nodes. The late `99-zz` name keeps these permissions after generic
+  distro rules that also match ESP USB-JTAG style devices.
 - `scripts/esp_usb_dln2_setup_host_device.sh` is the root-side systemd
   oneshot. It finds a `/sys/class/spi_master/spi*` whose parent driver is
   `dln2-spi`, registers CS0 with the `dh2228fv` modalias accepted by mainline
@@ -412,8 +414,9 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   `sudo ./scripts/install_host_support.sh --group GROUP` or afterward through
   `/etc/esp_usb_dln2/host.conf`.
 - `scripts/check_device_ready.sh` is the user-facing diagnostic. It checks
-  USB presence, GPIO by-id link, DLN-2 I2C adapter, DLN-2 SPI master,
-  `/dev/spidev*`, DLN-2 IIO ADC, and basic read/write permissions.
+  USB presence, GPIO by-id link, DLN-2 I2C adapter, DLN-2 SPI master, the exact
+  `/dev/spidev<dln2-bus>.<configured-cs>` node, DLN-2 IIO ADC, and basic
+  read/write permissions.
 
 ## Verification Notes
 

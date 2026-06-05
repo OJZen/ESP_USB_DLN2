@@ -2,7 +2,15 @@
 set -u
 
 VID_PID="a257:2013"
+CONFIG_FILE="/etc/esp_usb_dln2/host.conf"
+SPI_CS="${ESP_USB_DLN2_SPI_CS:-0}"
 status=0
+
+if [ -r "$CONFIG_FILE" ]; then
+    # shellcheck disable=SC1090
+    . "$CONFIG_FILE"
+    SPI_CS="${ESP_USB_DLN2_SPI_CS:-$SPI_CS}"
+fi
 
 ok() {
     printf 'OK   %s\n' "$*"
@@ -59,11 +67,13 @@ done
 [ -n "$i2c_node" ] || warn "DLN2 I2C adapter not found"
 
 spi_master=""
+spi_bus=""
 for master in /sys/class/spi_master/spi*; do
     [ -e "$master" ] || continue
     target="$(readlink -f "$master")"
     if grep -q '^DRIVER=dln2-spi$' "$target/device/uevent" 2>/dev/null; then
         spi_master="${master##*/}"
+        spi_bus="${spi_master#spi}"
         ok "SPI master $spi_master is backed by dln2-spi"
         break
     fi
@@ -71,14 +81,18 @@ done
 [ -n "$spi_master" ] || warn "DLN2 SPI master not found"
 
 spidev_node=""
-for dev in /dev/spidev*; do
-    [ -e "$dev" ] || continue
-    spidev_node="$dev"
-    ok "SPI spidev node $dev"
-    check_rw "$dev"
-    break
-done
-[ -n "$spidev_node" ] || warn "spidev node not found; run sudo systemctl start esp-usb-dln2-spi.service"
+if [ -n "$spi_bus" ]; then
+    candidate="/dev/spidev${spi_bus}.${SPI_CS}"
+    if [ -e "$candidate" ]; then
+        spidev_node="$candidate"
+        ok "SPI spidev node $spidev_node"
+        check_rw "$spidev_node"
+    else
+        warn "$candidate not found; run sudo systemctl start esp-usb-dln2-spi.service"
+    fi
+else
+    warn "spidev node not checked because DLN2 SPI master is missing"
+fi
 
 iio_node=""
 for dev in /sys/bus/iio/devices/iio:device*; do
