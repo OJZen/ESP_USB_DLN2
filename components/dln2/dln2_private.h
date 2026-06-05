@@ -117,6 +117,8 @@ size_t dln2_spi_handle_request(const dln2_request_t *request,
 void dln2_adc_init(void);
 size_t dln2_adc_handle_request(const dln2_request_t *request,
                                uint8_t *response, size_t response_cap);
+bool dln2_adc_next_event(uint8_t *event, size_t event_cap, size_t *event_len,
+                         uint32_t timeout_ms);
 
 void dln2_gpio_init(void);
 size_t dln2_gpio_handle_request(const dln2_request_t *request,

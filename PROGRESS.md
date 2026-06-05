@@ -34,6 +34,8 @@ USB GPIO device.
       register a SPI master on Linux.
 - [x] M17: Implement the Linux `dln2-adc` minimal raw-read path and verify IIO
       sysfs raw reads.
+- [x] M18: Add the firmware-side Linux `dln2-adc` triggered-buffer event path
+      and host buffer test script.
 
 ## Log
 
@@ -175,9 +177,26 @@ USB GPIO device.
 - I2C runtime access still requires a process with group `i2c`. The current
   Codex shell does not list `i2c` in `id`, but both `sg i2c -c ...` and
   `newgrp i2c` successfully run `i2cdetect -F 4` and `i2cdetect -r -y 4`.
-- ADC buffered/triggered IIO support is still not implemented. The firmware
-  has a `GET_ALL_VAL` helper, but no ADC event generation or
-  `CHANNEL_SET_CFG` path yet.
+- Implemented the firmware-side Linux `dln2-adc` triggered-buffer path:
+  `DLN2_ADC_CHANNEL_SET_CFG`, periodic `DLN2_ADC_CONDITION_MET_EV` generation,
+  and event dispatch interleaving with GPIO events.
+- Added `scripts/iio_adc_buffer_test.py` to configure IIO scan elements,
+  set `sampling_frequency`, enable the kernel buffer, and read binary samples
+  from `/dev/iio:deviceX`.
+- Rebuilt and flashed the S3 firmware to `/dev/ttyACM1`.
+- Verified after the ADC buffer firmware change:
+  - `lsusb -d a257:2013` reports `Diolan DLN-2 USB GPIO`.
+  - `gpiodetect` still reports `gpiochip2 [dln2] (10 lines)`.
+  - `i2cdetect -l` still reports `/dev/i2c-4` as `dln2-i2c-3-2.1.2:1.0-0`.
+  - `/sys/class/spi_master/spi0` still resolves to the DLN-2 SPI child path.
+  - `/sys/bus/iio/devices/iio:device0/name` reports `dln2-adc`.
+  - `in_voltage0_raw` through `in_voltage3_raw` still read successfully.
+- Full IIO buffered read validation is pending host permissions. On this host
+  `/sys/bus/iio/devices/iio:device0/buffer/enable`,
+  `scan_elements/in_voltage*_en`, `sampling_frequency`, and `/dev/iio:device0`
+  are owned by `root:root`; `sudo -n` is not available for the current Codex
+  process. Running `./scripts/iio_adc_buffer_test.py --channels 0` currently
+  fails at `buffer/enable` with permission denied, as expected.
 
 ### 2026-06-04
 

@@ -5,6 +5,9 @@
 #include "driver/gpio.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_log.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 
 #define DLN2_ADC_CMD(cmd) DLN2_CMD(cmd, DLN2_MODULE_ADC)
 
@@ -16,11 +19,18 @@
 #define DLN2_ADC_SET_RESOLUTION    DLN2_ADC_CMD(0x08)
 #define DLN2_ADC_CHANNEL_GET_VAL   DLN2_ADC_CMD(0x0a)
 #define DLN2_ADC_CHANNEL_GET_ALL_VAL DLN2_ADC_CMD(0x0b)
+#define DLN2_ADC_CHANNEL_SET_CFG   DLN2_ADC_CMD(0x0c)
+#define DLN2_ADC_CONDITION_MET_EV  DLN2_ADC_CMD(0x10)
+
+#define DLN2_ADC_EVENT_NONE   0
+#define DLN2_ADC_EVENT_ALWAYS 5
 
 #define DLN2_ADC_PORT 0
 #define DLN2_ADC_RESOLUTION_BITS 10
 #define DLN2_ADC_RAW_MAX_10BIT 1023
 #define DLN2_ADC_ALL_VALUES_MAX_CHANNELS 8
+#define DLN2_ADC_EVENT_QUEUE_LEN 32
+#define DLN2_ADC_NO_TRIGGER 0xff
 
 typedef struct {
     gpio_num_t gpio;
@@ -28,10 +38,20 @@ typedef struct {
 } dln2_adc_channel_t;
 
 typedef struct {
+    uint8_t type;
+    uint16_t period_ms;
+    uint16_t low;
+    uint16_t high;
+} dln2_adc_channel_cfg_t;
+
+typedef struct {
     bool unit_ready;
     bool port_enabled;
+    bool timer_started;
+    uint8_t trigger_channel;
     uint8_t resolution_bits;
     adc_oneshot_unit_handle_t unit;
+    esp_timer_handle_t timer;
 } dln2_adc_state_t;
 
 static const dln2_adc_channel_t s_adc_map[] = {
@@ -47,6 +67,89 @@ static const dln2_adc_channel_t s_adc_map[] = {
 static const char *TAG = "dln2_adc";
 static dln2_adc_state_t s_adc;
 static bool s_adc_channel_enabled[DLN2_ADC_CHANNEL_COUNT];
+static dln2_adc_channel_cfg_t s_adc_cfg[DLN2_ADC_CHANNEL_COUNT];
+static QueueHandle_t s_adc_event_queue;
+static uint32_t s_adc_event_drop_count;
+
+static void adc_timer_stop(void)
+{
+    if (!s_adc.timer_started) {
+        s_adc.trigger_channel = DLN2_ADC_NO_TRIGGER;
+        return;
+    }
+
+    esp_err_t err = esp_timer_stop(s_adc.timer);
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "esp_timer_stop failed: %s", esp_err_to_name(err));
+    }
+
+    s_adc.timer_started = false;
+    s_adc.trigger_channel = DLN2_ADC_NO_TRIGGER;
+}
+
+static bool adc_cfg_is_active(uint8_t channel)
+{
+    return s_adc.port_enabled && s_adc_channel_enabled[channel] &&
+           s_adc_cfg[channel].type == DLN2_ADC_EVENT_ALWAYS &&
+           s_adc_cfg[channel].period_ms > 0;
+}
+
+static uint16_t adc_timer_update(void)
+{
+    uint8_t trigger_channel = DLN2_ADC_NO_TRIGGER;
+    uint16_t period_ms = 0;
+
+    for (uint8_t i = 0; i < DLN2_ADC_CHANNEL_COUNT; i++) {
+        if (adc_cfg_is_active(i)) {
+            trigger_channel = i;
+            period_ms = s_adc_cfg[i].period_ms;
+            break;
+        }
+    }
+
+    if (trigger_channel == DLN2_ADC_NO_TRIGGER) {
+        adc_timer_stop();
+        return DLN2_RES_SUCCESS;
+    }
+
+    if (s_adc.timer_started) {
+        adc_timer_stop();
+    }
+
+    if (!s_adc.timer) {
+        return DLN2_RES_FAIL;
+    }
+
+    esp_err_t err = esp_timer_start_periodic(s_adc.timer,
+                                             (uint64_t)period_ms * 1000ULL);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_timer_start_periodic %u ms failed: %s",
+                 period_ms, esp_err_to_name(err));
+        return DLN2_RES_FAIL;
+    }
+
+    s_adc.timer_started = true;
+    s_adc.trigger_channel = trigger_channel;
+    ESP_LOGI(TAG, "ADC event timer ch%u period=%u ms", trigger_channel,
+             period_ms);
+    return DLN2_RES_SUCCESS;
+}
+
+static void adc_timer_callback(void *arg)
+{
+    uint8_t channel = s_adc.trigger_channel;
+
+    (void)arg;
+
+    if (!s_adc_event_queue || channel >= DLN2_ADC_CHANNEL_COUNT ||
+        !adc_cfg_is_active(channel)) {
+        return;
+    }
+
+    if (xQueueSend(s_adc_event_queue, &channel, 0) != pdTRUE) {
+        s_adc_event_drop_count++;
+    }
+}
 
 static uint16_t adc_parse_port(const dln2_request_t *request, uint8_t *port)
 {
@@ -221,6 +324,12 @@ static size_t adc_channel_enable_request(const dln2_request_t *request,
         }
     }
 
+    result = adc_timer_update();
+    if (result != DLN2_RES_SUCCESS) {
+        return dln2_make_response(request, result, NULL, 0, response,
+                                  response_cap);
+    }
+
     ESP_LOGI(TAG, "%s ADC ch%u GPIO%d",
              enable ? "enabled" : "disabled", channel,
              s_adc_map[channel].gpio);
@@ -249,7 +358,19 @@ static size_t adc_enable_request(const dln2_request_t *request, bool enable,
         }
     }
 
+    if (!enable) {
+        adc_timer_stop();
+    }
+
     s_adc.port_enabled = enable;
+    if (enable) {
+        result = adc_timer_update();
+        if (result != DLN2_RES_SUCCESS) {
+            return adc_conflict_response(request, result, 0, response,
+                                         response_cap);
+        }
+    }
+
     ESP_LOGI(TAG, "%s ADC port %u", enable ? "enabled" : "disabled",
              DLN2_ADC_PORT);
     return adc_conflict_response(request, DLN2_RES_SUCCESS, 0, response,
@@ -351,16 +472,127 @@ static size_t adc_get_all_values(const dln2_request_t *request,
                               sizeof(payload), response, response_cap);
 }
 
+static size_t adc_set_channel_cfg(const dln2_request_t *request,
+                                  uint8_t *response, size_t response_cap)
+{
+    uint8_t port;
+    uint8_t channel;
+    uint8_t type;
+    uint16_t result;
+
+    if (request->payload_len != 9) {
+        return dln2_make_response(request, DLN2_RES_INVALID_COMMAND_SIZE,
+                                  NULL, 0, response, response_cap);
+    }
+
+    port = request->payload[0];
+    channel = request->payload[1];
+    type = request->payload[2];
+
+    if (port != DLN2_ADC_PORT) {
+        return dln2_make_response(request, DLN2_RES_INVALID_PORT_NUMBER,
+                                  NULL, 0, response, response_cap);
+    }
+
+    if (channel >= DLN2_ADC_CHANNEL_COUNT) {
+        return dln2_make_response(request, DLN2_RES_INVALID_CHANNEL_NUMBER,
+                                  NULL, 0, response, response_cap);
+    }
+
+    if (type != DLN2_ADC_EVENT_NONE && type != DLN2_ADC_EVENT_ALWAYS) {
+        return dln2_make_response(request, DLN2_RES_INVALID_VALUE, NULL, 0,
+                                  response, response_cap);
+    }
+
+    s_adc_cfg[channel].type = type;
+    s_adc_cfg[channel].period_ms = dln2_get_le16(request->payload + 3);
+    s_adc_cfg[channel].low = dln2_get_le16(request->payload + 5);
+    s_adc_cfg[channel].high = dln2_get_le16(request->payload + 7);
+
+    if (s_adc_cfg[channel].period_ms == 0) {
+        s_adc_cfg[channel].type = DLN2_ADC_EVENT_NONE;
+    }
+
+    result = adc_timer_update();
+    if (result != DLN2_RES_SUCCESS) {
+        return dln2_make_response(request, result, NULL, 0, response,
+                                  response_cap);
+    }
+
+    ESP_LOGI(TAG, "ADC ch%u cfg type=%u period=%u low=%u high=%u", channel,
+             s_adc_cfg[channel].type, s_adc_cfg[channel].period_ms,
+             s_adc_cfg[channel].low, s_adc_cfg[channel].high);
+    return dln2_make_response(request, DLN2_RES_SUCCESS, NULL, 0, response,
+                              response_cap);
+}
+
 void dln2_adc_init(void)
 {
+    esp_timer_create_args_t timer_args = {
+        .callback = adc_timer_callback,
+        .name = "dln2_adc",
+    };
+
     memset(&s_adc, 0, sizeof(s_adc));
     memset(s_adc_channel_enabled, 0, sizeof(s_adc_channel_enabled));
+    memset(s_adc_cfg, 0, sizeof(s_adc_cfg));
+    s_adc_event_drop_count = 0;
+    s_adc.trigger_channel = DLN2_ADC_NO_TRIGGER;
     s_adc.resolution_bits = DLN2_ADC_RESOLUTION_BITS;
+
+    s_adc_event_queue = xQueueCreate(DLN2_ADC_EVENT_QUEUE_LEN,
+                                     sizeof(uint8_t));
+    if (!s_adc_event_queue) {
+        ESP_LOGE(TAG, "failed to create ADC event queue");
+    }
+
+    esp_err_t err = esp_timer_create(&timer_args, &s_adc.timer);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_timer_create failed: %s", esp_err_to_name(err));
+    }
 
     ESP_LOGI(TAG,
              "initialized ADC port %u channels: ch0=GPIO14 ch1=GPIO15 "
              "ch2=GPIO16 ch3=GPIO17",
              DLN2_ADC_PORT);
+}
+
+bool dln2_adc_next_event(uint8_t *event, size_t event_cap, size_t *event_len,
+                         uint32_t timeout_ms)
+{
+    uint8_t channel;
+    TickType_t wait_ticks = pdMS_TO_TICKS(timeout_ms);
+    size_t len;
+
+    if (!event || !event_len) {
+        return false;
+    }
+
+    *event_len = 0;
+
+    if (!s_adc_event_queue) {
+        return false;
+    }
+
+    while (xQueueReceive(s_adc_event_queue, &channel, wait_ticks) == pdTRUE) {
+        wait_ticks = 0;
+
+        if (channel >= DLN2_ADC_CHANNEL_COUNT || !adc_cfg_is_active(channel)) {
+            continue;
+        }
+
+        len = dln2_make_event(DLN2_ADC_CONDITION_MET_EV, 0, NULL, 0, event,
+                              event_cap);
+        if (len == 0) {
+            return false;
+        }
+
+        *event_len = len;
+        ESP_LOGD(TAG, "ADC event ch%u", channel);
+        return true;
+    }
+
+    return false;
 }
 
 size_t dln2_adc_handle_request(const dln2_request_t *request,
@@ -392,6 +624,9 @@ size_t dln2_adc_handle_request(const dln2_request_t *request,
 
     case DLN2_ADC_CHANNEL_GET_ALL_VAL:
         return adc_get_all_values(request, response, response_cap);
+
+    case DLN2_ADC_CHANNEL_SET_CFG:
+        return adc_set_channel_cfg(request, response, response_cap);
 
     default:
         ESP_LOGW(TAG, "unsupported ADC id=0x%04x", request->id);

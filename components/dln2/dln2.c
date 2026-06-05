@@ -6,6 +6,7 @@
 #include "esp_log.h"
 
 static const char *TAG = "dln2";
+static bool s_next_event_prefer_adc = true;
 
 void dln2_init(void)
 {
@@ -70,7 +71,37 @@ size_t dln2_make_event(uint16_t id, uint16_t echo, const void *payload,
 bool dln2_next_event(uint8_t *event, size_t event_cap, size_t *event_len,
                      uint32_t timeout_ms)
 {
-    return dln2_gpio_next_event(event, event_cap, event_len, timeout_ms);
+    if (s_next_event_prefer_adc) {
+        if (dln2_adc_next_event(event, event_cap, event_len, 0)) {
+            s_next_event_prefer_adc = false;
+            return true;
+        }
+        if (dln2_gpio_next_event(event, event_cap, event_len, 0)) {
+            s_next_event_prefer_adc = true;
+            return true;
+        }
+    } else {
+        if (dln2_gpio_next_event(event, event_cap, event_len, 0)) {
+            s_next_event_prefer_adc = true;
+            return true;
+        }
+        if (dln2_adc_next_event(event, event_cap, event_len, 0)) {
+            s_next_event_prefer_adc = false;
+            return true;
+        }
+    }
+
+    if (dln2_adc_next_event(event, event_cap, event_len, timeout_ms)) {
+        s_next_event_prefer_adc = false;
+        return true;
+    }
+
+    if (dln2_gpio_next_event(event, event_cap, event_len, 0)) {
+        s_next_event_prefer_adc = true;
+        return true;
+    }
+
+    return false;
 }
 
 static size_t dln2_handle_ctrl(const dln2_request_t *request,

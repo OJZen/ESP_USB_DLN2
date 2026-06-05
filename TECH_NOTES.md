@@ -69,6 +69,12 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   `DISABLE`, and `CHANNEL_DISABLE`. The Linux driver sends value `10` in the
   second byte of `SET_RESOLUTION`; despite the struct field name, this is the
   requested ADC resolution in bits.
+- ADC buffered mode uses Linux IIO triggered-buffer plumbing. The driver
+  enables selected channels through `update_scan_mode`, enables the ADC port in
+  `postenable`, then sends `CHANNEL_SET_CFG` on the first active channel with
+  event type `ALWAYS` and a millisecond period derived from
+  `sampling_frequency`. Each `CONDITION_MET_EV` only triggers the kernel; the
+  kernel then reads a synchronized frame with `GET_ALL_VAL`.
 - The firmware now has a central ESP32-S3 physical pin ownership table. GPIO
   enable claims the line's physical GPIO as module `0x01`; GPIO disable releases
   it. Future I2C/SPI/ADC enable paths must claim their physical pins before
@@ -124,6 +130,12 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - Floating ADC inputs can read any value, including full-scale 1023. Treat
   current sysfs reads as command-path validation unless the ADC pin is connected
   to a known voltage within ESP32-S3 limits.
+- The firmware implements ADC buffer events with an ESP timer and a FreeRTOS
+  queue. Event payload is empty because Linux `dln2-adc` ignores event payload
+  and immediately calls `GET_ALL_VAL` from its trigger handler.
+- The shared USB event task now asks both ADC and GPIO event producers for
+  packets. ADC/GPIO queue polling is interleaved so a fast ADC buffer stream
+  does not permanently starve GPIO IRQ events.
 
 ## Implemented USB Shape
 
@@ -320,6 +332,11 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - ADC raw reads create and keep one ESP-IDF oneshot unit. Linux direct sysfs
   reads enable/disable individual ADC channels around each read; the firmware
   claims/releases the corresponding physical GPIO on those channel commands.
-- ADC buffered IIO mode needs more than `GET_ALL_VAL`: the driver expects ADC
-  condition events to drive the triggered buffer path. Leave that path disabled
-  until `CHANNEL_SET_CFG` and ADC event generation are implemented deliberately.
+- ADC buffered IIO mode now has firmware support for `CHANNEL_SET_CFG`,
+  `CONDITION_MET_EV`, and `GET_ALL_VAL`, but host-side buffer validation needs
+  root access unless udev/sysfs permissions are relaxed. On this host the IIO
+  sysfs enable files and `/dev/iio:device0` are `root:root`, and
+  passwordless sudo is not available to the current process.
+- `scripts/iio_adc_buffer_test.py` is the intended host smoke test once root
+  access is available. Example:
+  `sudo ./scripts/iio_adc_buffer_test.py --channels "0 1" --frequency 10 --samples 8`.

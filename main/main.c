@@ -123,7 +123,7 @@ static void dln2_event_task(void *arg)
             continue;
         }
 
-        if (tud_vendor_n_write_available(DLN2_VENDOR_ITF) < 14) {
+        if (tud_vendor_n_write_available(DLN2_VENDOR_ITF) < DLN2_HEADER_SIZE) {
             vTaskDelay(pdMS_TO_TICKS(DLN2_EVENT_USB_BACKOFF_MS));
             continue;
         }
@@ -142,7 +142,8 @@ static void dln2_event_task(void *arg)
                          (unsigned)written, (unsigned)event_len);
                 break;
             }
-        } while (tud_vendor_n_write_available(DLN2_VENDOR_ITF) >= 14 &&
+        } while (tud_vendor_n_write_available(DLN2_VENDOR_ITF) >=
+                     DLN2_HEADER_SIZE &&
                  dln2_next_event(event_buf, sizeof(event_buf), &event_len, 0));
     }
 }
