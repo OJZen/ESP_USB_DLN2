@@ -50,9 +50,10 @@ minimal command coverage and resource ownership.
 5. Implement ADC direct raw reads. Add buffered ADC event support only after raw
    IIO sysfs reads are stable.
 
-Current status: steps 1-4 are implemented enough for Linux GPIO, I2C adapter,
-and SPI master enumeration. I2C/SPI still need successful target-device
-transfer validation, and ADC implementation has not started.
+Current status: steps 1-5 are implemented enough for Linux GPIO, I2C adapter,
+SPI master enumeration, and ADC IIO raw sysfs reads. I2C/SPI still need
+successful target-device transfer validation. ADC buffered/triggered mode is
+not implemented.
 
 ## Resource Ownership
 
@@ -79,13 +80,12 @@ Requirements:
   `gpio-dln2` enables all exported GPIO lines during probe, so sharing physical
   pins between exported GPIO and I2C/SPI/ADC is a real conflict.
 
-Open hardware decision:
+Current hardware split:
 
-- Define a stable v2 pin map that partitions ESP32-S3 pins into:
-  - exported GPIO lines
-  - I2C SDA/SCL
-  - SPI SCLK/MOSI/MISO/CS
-  - ADC-capable inputs
+- Exported GPIO lines: ESP32-S3 GPIO1, GPIO2, GPIO4-GPIO9, GPIO18, GPIO21.
+- I2C port 0: GPIO38 SDA, GPIO47 SCL.
+- SPI port 0: GPIO10 SCLK, GPIO11 MOSI, GPIO12 MISO, GPIO13 CS0.
+- ADC port 0: GPIO14-GPIO17 as ADC2 channels 3-6.
 - ESP32-S3 ADC-capable pins include ADC1 GPIO1-GPIO10 and ADC2 GPIO11-GPIO20.
   GPIO19/GPIO20 are native USB and must remain excluded.
 
@@ -158,7 +158,7 @@ Current state:
 - SPI port `0` is implemented with ESP32-S3 GPIO10 as SCLK, GPIO11 as MOSI,
   GPIO12 as MISO, and GPIO13 as CS0.
 - GPIO10-GPIO13 are removed from the exported GPIO map, so the Linux GPIO chip
-  now exposes 14 lines.
+  has those physical pins available for SPI.
 - Linux controller enumeration works; the current host creates
   `/sys/class/spi_master/spi0`.
 - Transfer testing still needs a C3 SPI slave fixture or a known external SPI
@@ -224,6 +224,15 @@ Next target:
 
 ## ADC Minimal Implementation
 
+Current state:
+
+- ADC port `0` is implemented with ESP32-S3 GPIO14-GPIO17 as ADC2 inputs.
+- Linux IIO enumeration works; the current host creates a `dln2-adc` IIO
+  device with `in_voltage0_raw` through `in_voltage3_raw`.
+- Direct raw reads work through sysfs. The current input values are floating
+  and should not be treated as electrical calibration results.
+- ADC buffered/triggered mode is not implemented yet.
+
 Linux probe path:
 
 - `DLN2_ADC_SET_RESOLUTION` (`DLN2_CMD(0x08, 0x06)`)
@@ -268,9 +277,9 @@ Buffered read path:
   - Event payload is consumed only to trigger the IIO buffer handler; the
     Linux driver reads fresh values with `GET_ALL_VAL`.
 
-First target:
+Next target:
 
-- Direct raw reads only.
-- Advertise a small channel count that matches the v2 ADC pin map.
-- Return 10-bit values, scaling ESP-IDF ADC readings down if needed.
-- Validate via IIO sysfs raw files before attempting triggered buffers.
+- Implement `CHANNEL_SET_CFG` and ADC condition-event generation if buffered
+  IIO mode is needed.
+- Add a C3 or external analog fixture if repeatable ADC electrical validation
+  is needed.

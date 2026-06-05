@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DEFAULT_CHIP="/dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00"
-DEFAULT_LINE_MAP="0:1 1:2 2:4 3:5 4:6 5:7 6:8 7:9 8:14 9:15 10:16 11:17 12:18 13:21"
+DEFAULT_LINE_MAP="0:1 1:2 2:4 3:5 4:6 5:7 6:8 7:9 8:18 9:21"
 
 CHIP="${CHIP:-$DEFAULT_CHIP}"
 HIGH_SECONDS="${HIGH_SECONDS:-3}"
@@ -20,7 +20,7 @@ if [[ $# -gt 0 ]]; then
 elif [[ -n "$LINES_ENV" ]]; then
     read -r -a LINES <<< "$LINES_ENV"
 else
-    LINES=(0 1 2 3 4 5 6 7 8 9 10 11 12 13)
+    LINES=(0 1 2 3 4 5 6 7 8 9)
 fi
 
 if [[ ! -e "$CHIP" ]]; then

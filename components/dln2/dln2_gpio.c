@@ -63,10 +63,6 @@ static const gpio_num_t s_gpio_map[] = {
     GPIO_NUM_7,
     GPIO_NUM_8,
     GPIO_NUM_9,
-    GPIO_NUM_14,
-    GPIO_NUM_15,
-    GPIO_NUM_16,
-    GPIO_NUM_17,
     GPIO_NUM_18,
     GPIO_NUM_21,
 };

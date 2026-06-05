@@ -32,6 +32,8 @@ USB GPIO device.
       path and verify adapter enumeration.
 - [x] M16: Implement the Linux `spi-dln2` minimal controller probe path and
       register a SPI master on Linux.
+- [x] M17: Implement the Linux `dln2-adc` minimal raw-read path and verify IIO
+      sysfs raw reads.
 
 ## Log
 
@@ -148,6 +150,34 @@ USB GPIO device.
   SPI master by default; no `/dev/spidev*` device is created without a described
   SPI slave device. The next validation target is a C3 SPI slave fixture or a
   known external SPI device.
+- Implemented the minimal Linux `dln2-adc` raw-read command set:
+  `DLN2_ADC_SET_RESOLUTION`, `DLN2_ADC_GET_CHANNEL_COUNT`,
+  `DLN2_ADC_CHANNEL_ENABLE`, `DLN2_ADC_ENABLE`,
+  `DLN2_ADC_CHANNEL_GET_VAL`, `DLN2_ADC_DISABLE`, and
+  `DLN2_ADC_CHANNEL_DISABLE`.
+- Assigned ADC port 0 to ESP32-S3 ADC2 inputs GPIO14-GPIO17, exposed to Linux
+  as IIO channels `in_voltage0_raw` through `in_voltage3_raw`.
+- Removed GPIO14-GPIO17 from the exported GPIO line map so `gpio-dln2` does
+  not claim those physical pins before `dln2-adc` raw reads. The exported GPIO
+  chip now has 10 lines.
+- Rebuilt and flashed the S3 firmware to `/dev/ttyACM1`.
+- Verified after the ADC change:
+  - `lsusb -d a257:2013` reports `Diolan DLN-2 USB GPIO`.
+  - `gpiodetect` reports `gpiochip2 [dln2] (10 lines)`.
+  - `i2cdetect -l` still reports `/dev/i2c-4` as `dln2-i2c-3-2.1.2:1.0-0`.
+  - `/sys/class/spi_master/spi0` still resolves to the DLN-2 SPI child path.
+  - `/sys/bus/iio/devices/iio:device0/name` reports `dln2-adc`.
+  - `/sys/bus/iio/devices/iio:device0/in_voltage0_raw` through
+    `in_voltage3_raw` read successfully. Current values are from floating
+    inputs and are only a protocol-path check.
+  - `gpioinfo`, `gpioget`, and `gpiomon` work on current GPIO lines 0-9.
+  - The C3 closed-loop test still passes for wired GPIO lines 0-6.
+- I2C runtime access still requires a process with group `i2c`. The current
+  Codex shell does not list `i2c` in `id`, but both `sg i2c -c ...` and
+  `newgrp i2c` successfully run `i2cdetect -F 4` and `i2cdetect -r -y 4`.
+- ADC buffered/triggered IIO support is still not implemented. The firmware
+  has a `GET_ALL_VAL` helper, but no ADC event generation or
+  `CHANNEL_SET_CFG` path yet.
 
 ### 2026-06-04
 

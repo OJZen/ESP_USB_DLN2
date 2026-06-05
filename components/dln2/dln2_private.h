@@ -114,6 +114,10 @@ void dln2_spi_init(void);
 size_t dln2_spi_handle_request(const dln2_request_t *request,
                                uint8_t *response, size_t response_cap);
 
+void dln2_adc_init(void);
+size_t dln2_adc_handle_request(const dln2_request_t *request,
+                               uint8_t *response, size_t response_cap);
+
 void dln2_gpio_init(void);
 size_t dln2_gpio_handle_request(const dln2_request_t *request,
                                 uint8_t *response, size_t response_cap);

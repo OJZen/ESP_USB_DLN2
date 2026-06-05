@@ -112,6 +112,18 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - A Linux SPI controller does not automatically create `/dev/spidev*`. Actual
   SPI transfer tests need a described SPI slave device or a C3 SPI slave test
   fixture.
+- ADC port 0 uses ESP32-S3 GPIO14-GPIO17 as ADC2 channels 3-6. The firmware
+  advertises 4 ADC channels to Linux and returns 10-bit raw values by reading
+  ESP-IDF ADC oneshot at the chip's default/max bit width and shifting down.
+- GPIO14-GPIO17 are removed from the exported GPIO map before enabling
+  `dln2-adc`; otherwise `gpio-dln2` would claim them during GPIO probe and ADC
+  channel enable would fail with `DLN2_RES_PIN_IN_USE`.
+- Linux registers the ADC as an IIO device, currently
+  `/sys/bus/iio/devices/iio:device0` on this host, with raw files
+  `in_voltage0_raw` through `in_voltage3_raw`.
+- Floating ADC inputs can read any value, including full-scale 1023. Treat
+  current sysfs reads as command-path validation unless the ADC pin is connected
+  to a known voltage within ESP32-S3 limits.
 
 ## Implemented USB Shape
 
@@ -143,12 +155,8 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 | 5          | GPIO7         |
 | 6          | GPIO8         |
 | 7          | GPIO9         |
-| 8          | GPIO14        |
-| 9          | GPIO15        |
-| 10         | GPIO16        |
-| 11         | GPIO17        |
-| 12         | GPIO18        |
-| 13         | GPIO21        |
+| 8          | GPIO18        |
+| 9          | GPIO21        |
 
 ## Excluded GPIOs
 
@@ -165,6 +173,7 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - GPIO38/GPIO47: reserved for I2C port 0 SDA/SCL.
 - GPIO10/GPIO11/GPIO12/GPIO13: reserved for SPI port 0
   SCLK/MOSI/MISO/CS0.
+- GPIO14/GPIO15/GPIO16/GPIO17: reserved for ADC port 0 channels 0-3.
 
 ## ESP32-C3 Closed-Loop Probe
 
@@ -205,8 +214,9 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   against the same USB-Serial/JTAG TTY corrupt command/response streams and can
   produce misleading partial lines.
 - The first closed-loop pass should use S3 DLN lines 0-7. The same C3 probe can
-  cover S3 lines 8-17 later by moving the eight resistor-protected wires and
-  passing the selected line offsets with `--lines`.
+  cover the remaining current GPIO lines 8-9 later by moving the
+  resistor-protected wires and passing the selected line offsets with
+  `--lines`.
 - If C3 GPIO10 / probe channel 7 is not wired, run the test with
   `--lines "0 1 2 3 4 5 6"` so the script only drives and samples channels
   0-6. This seven-channel setup was verified on `/dev/ttyACM2` against S3 DLN
@@ -233,15 +243,23 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   - `gpioget -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 --numeric 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17`
   - `gpioset -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -t 100ms,0 17=1`
   - `gpiomon -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -e both --debounce-period 10ms --idle-timeout 1s 17`
-- The kernel also autoloads I2C, SPI, and ADC DLN-2 subdrivers. The firmware
-  currently returns `DLN2_RES_NOT_IMPLEMENTED` for ADC commands.
-- After reserving GPIO10-GPIO13 for SPI, the current GPIO map exposes 14 lines.
+- After reserving GPIO10-GPIO13 for SPI, that stage's GPIO map exposed 14
+  lines.
   Verified:
   - `gpiodetect` reports `gpiochip2 [dln2] (14 lines)`.
   - `gpioinfo -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 0 1 2 3 4 5 6 7 8 9 10 11 12 13`
   - `gpioget -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 --numeric 0 1 2 3 4 5 6 7 8 9 10 11 12 13`
   - `gpiomon -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -e both --debounce-period 10ms --idle-timeout 1s 13`
   - `/sys/class/spi_master/spi0` resolves to a `dln2-spi` child device.
+- After reserving GPIO14-GPIO17 for ADC, the current GPIO map exposes 10
+  lines. Verified:
+  - `gpiodetect` reports `gpiochip2 [dln2] (10 lines)`.
+  - `gpioinfo -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 0 1 2 3 4 5 6 7 8 9`
+  - `gpioget -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 --numeric 0 1 2 3 4 5 6 7 8 9`
+  - `gpiomon -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -e both --debounce-period 10ms --idle-timeout 1s 9`
+  - `/sys/class/spi_master/spi0` still resolves to a `dln2-spi` child device.
+  - `/sys/bus/iio/devices/iio:device0/name` reports `dln2-adc`.
+  - `in_voltage0_raw` through `in_voltage3_raw` read successfully.
 
 ## Pitfalls
 
@@ -273,7 +291,7 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   operation. On Ctrl-C or SIGTERM it attempts to set all selected lines low
   before releasing the request.
 - Linux GPIO line offsets are DLN-2 line numbers, not ESP32-S3 GPIO numbers.
-  In the current firmware, line 0 maps to ESP32 GPIO1 and line 13 maps to
+  In the current firmware, line 0 maps to ESP32 GPIO1 and line 9 maps to
   ESP32 GPIO21.
 - On the WeAct ESP32S3-A schematic, GPIO0 is tied to `KEY@BOOT` and the
   auto-download circuit path. GPIO0 and GPIO3 are also ESP32-S3 strapping pins,
@@ -297,3 +315,11 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - USB event writes must stay out of ISR context. The event task waits for queued
   GPIO events and drains any immediately available events while the vendor IN
   endpoint has room.
+- ESP32-S3 ADC2 is safe here because the firmware does not use Wi-Fi. If Wi-Fi
+  is added later, ADC2 access needs to be re-evaluated.
+- ADC raw reads create and keep one ESP-IDF oneshot unit. Linux direct sysfs
+  reads enable/disable individual ADC channels around each read; the firmware
+  claims/releases the corresponding physical GPIO on those channel commands.
+- ADC buffered IIO mode needs more than `GET_ALL_VAL`: the driver expects ADC
+  condition events to drive the triggered buffer path. Leave that path disabled
+  until `CHANNEL_SET_CFG` and ADC event generation are implemented deliberately.
