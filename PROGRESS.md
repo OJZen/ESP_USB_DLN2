@@ -52,6 +52,7 @@ USB GPIO device.
       fixture.
 - [x] M28: Validate common Linux `I2C_SMBUS` ioctl paths against the C3 I2C
       fixture.
+- [x] M29: Validate I2C error recovery and short mixed-transfer stability.
 
 ## Log
 
@@ -409,6 +410,22 @@ USB GPIO device.
 - Ran a final short all-path I2C regression combining raw read/write,
   `I2C_RDWR`, and `I2C_SMBUS` in one script invocation. It reported
   `PASS I2C transfer matrix`.
+- Added `scripts/i2c_c3_stress_test.py` for I2C error-recovery and short
+  stability validation. It reuses the C3 I2C fixture and the existing Linux
+  ioctl helper functions.
+- Verified bad-address recovery using unused address `0x53` while the C3
+  fixture remained at `0x52`:
+  - raw write to `0x53` failed as expected with `EPROTO`.
+  - raw read from `0x53` failed as expected with `EREMOTEIO`.
+  - two-message `I2C_RDWR` to `0x53` failed as expected with `EPROTO`.
+  - after each failure, a known-good write/read against `0x52` succeeded.
+- Ran a 50-cycle mixed stress pass against `/dev/i2c-4` and `/dev/ttyACM2`.
+  Each cycle performed raw write, raw read, `I2C_RDWR` register read, SMBus
+  byte-data write, and SMBus byte-data read. Transfer lengths cycled through
+  1, 4, 16, 64, and 256 bytes; register values cycled through `0x00`,
+  `0x10`, and `0x7f`.
+- The stress script reported `PASS I2C stability test` and stopped the C3 I2C
+  fixture cleanly.
 
 ### 2026-06-04
 

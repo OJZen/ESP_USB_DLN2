@@ -374,6 +374,18 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   `I2C_FUNC_SMBUS_BLOCK_PROC_CALL`, but its transfer function only handles
   fixed-length read messages; variable-length `I2C_M_RECV_LEN` behavior needs
   separate kernel-level scrutiny before relying on it.
+- `scripts/i2c_c3_stress_test.py` covers short stability and error recovery
+  without changing firmware. It keeps the C3 fixture at `0x52`, deliberately
+  targets unused address `0x53`, and verifies a good `0x52` transaction after
+  each expected failure.
+- Observed host error mapping for bad address `0x53` on the current system:
+  raw write and two-message `I2C_RDWR` return `EPROTO`; raw read returns
+  `EREMOTEIO`. The exact errno is a Linux/i2c-core path detail, so tests
+  should require failure plus recovery rather than one fixed errno.
+- A 50-cycle mixed I2C stress pass has validated repeated raw read/write,
+  two-message `I2C_RDWR`, and SMBus byte-data operations in one C3 fixture
+  session. This is a short functional soak, not yet a long-duration endurance
+  test.
 
 ## Verification Notes
 
