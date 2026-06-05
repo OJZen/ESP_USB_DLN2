@@ -35,6 +35,9 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - GPIO pin/value responses are `u16 pin` plus optional `u8 value`; set
   commands can respond with only the `u16 pin` because Linux transmit-only
   helpers ignore response payload.
+- When switching a line to output, write the stored output value before enabling
+  output mode and again afterward. This keeps the ESP32 output latch aligned
+  with the DLN-2 shadow value and reduces input-to-output transition glitches.
 - Linux `gpio-dln2` registers a callback for `DLN2_GPIO_CONDITION_MET_EV`.
   Event packets use `handle = 0` and do not include a response `result` field;
   the payload consumed by `gpio-dln2` is `u16 count`, `u8 type`, `u16 pin`,

@@ -356,6 +356,16 @@ static size_t dln2_gpio_set_direction(const dln2_request_t *request,
                                   response, response_cap);
     }
 
+    if (value == DLN2_GPIO_DIRECTION_OUT) {
+        esp_err_t err = gpio_set_level(line->gpio, line->out_value);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "gpio_set_level GPIO%d failed: %s", line->gpio,
+                     esp_err_to_name(err));
+            return dln2_make_response(request, DLN2_RES_FAIL, NULL, 0,
+                                      response, response_cap);
+        }
+    }
+
     mode = value == DLN2_GPIO_DIRECTION_OUT ? GPIO_MODE_OUTPUT : GPIO_MODE_INPUT;
     esp_err_t err = gpio_set_direction(line->gpio, mode);
     if (err != ESP_OK) {
@@ -367,7 +377,13 @@ static size_t dln2_gpio_set_direction(const dln2_request_t *request,
 
     line->is_output = value == DLN2_GPIO_DIRECTION_OUT;
     if (line->is_output) {
-        gpio_set_level(line->gpio, line->out_value);
+        err = gpio_set_level(line->gpio, line->out_value);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "gpio_set_level GPIO%d failed: %s", line->gpio,
+                     esp_err_to_name(err));
+            return dln2_make_response(request, DLN2_RES_FAIL, NULL, 0,
+                                      response, response_cap);
+        }
     }
 
     err = gpio_event_update(pin, line);

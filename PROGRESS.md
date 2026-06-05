@@ -23,6 +23,7 @@ USB GPIO device.
       closed-loop test harness.
 - [x] M10: Validate the C3 closed-loop probe against the S3 DLN-2 GPIO device.
 - [x] M11: Harden DLN-2 USB bulk OUT request framing.
+- [x] M12: Reduce output-direction switching glitches.
 
 ## Log
 
@@ -63,6 +64,13 @@ USB GPIO device.
   - `gpioget -c ... --numeric 0..17` succeeds.
   - The C3 closed-loop test on S3 lines 0-6 passes S3-output, C3-output, and
     per-line `gpiomon` event checks.
+- Updated GPIO output direction handling so `PIN_SET_DIRECTION` applies the
+  stored output value before enabling output mode and confirms it afterward.
+  This reduces the chance of a transient wrong level when userspace switches a
+  line from input to output.
+- Rebuilt and flashed the updated S3 firmware to `/dev/ttyACM1`.
+- Verified `gpioget`, `gpioset`, and the C3 closed-loop test on S3 lines 0-6
+  still pass.
 
 ### 2026-06-04
 
