@@ -48,6 +48,8 @@ USB GPIO device.
 - [x] M25: Add an ESP32-C3 I2C slave fixture and host-side Linux `i2c-dln2`
       read/write test tooling.
 - [x] M26: Validate DLN-2 I2C runtime transfers against the C3 fixture.
+- [x] M27: Validate Linux `I2C_RDWR` register-style reads against the C3 I2C
+      fixture.
 
 ## Log
 
@@ -374,6 +376,23 @@ USB GPIO device.
 - Hardened the I2C host script's C3 serial synchronization with an open delay
   and repeated `PING` attempts, matching the behavior needed by the GPIO probe
   script on USB-Serial/JTAG devices.
+- Checked the mainline Linux `i2c-dln2` source for combined transactions. The
+  driver loops over each `i2c_msg` in `master_xfer()` and sends either
+  `DLN2_I2C_WRITE` or `DLN2_I2C_READ`; it sets `mem_addr_len = 0` and does not
+  use the DLN-2 request's `mem_addr` fields.
+- Extended `scripts/i2c_c3_slave_test.py` with Linux `I2C_RDWR` ioctl support.
+  The new test mode arms a C3 one-byte receive for a register address, preloads
+  the C3 read buffer, then submits a two-message write/read ioctl through
+  `/dev/i2c-4`.
+- Verified `I2C_RDWR` register-style reads for register addresses `0x00`,
+  `0x10`, and `0x7f`, with read lengths 1, 4, 16, 64, and 256 bytes. The C3
+  fixture captured the requested register byte each time, host reads matched
+  the preloaded C3 pattern, and the full script again reported
+  `PASS I2C transfer matrix`.
+- Confirmed the practical compatibility boundary: common register-read devices
+  that tolerate a STOP between address write and data read can work through the
+  current mainline `i2c-dln2` path; strict repeated-start-only devices would
+  need kernel-driver work, not just firmware changes.
 
 ### 2026-06-04
 

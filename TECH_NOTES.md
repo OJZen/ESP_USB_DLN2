@@ -327,6 +327,20 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - The script uses the Linux `i2c-dev` `I2C_SLAVE` ioctl plus raw `read()` and
   `write()` calls, so it exercises the mainline `i2c-dln2` `READ` and `WRITE`
   command paths instead of bypassing the kernel driver.
+- The script also supports Linux `I2C_RDWR` ioctl register-style tests. It
+  builds two `struct i2c_msg` entries in Python with `ctypes`: one write
+  message containing the register byte, followed by one read message.
+- Mainline Linux `i2c-dln2` does not currently turn `I2C_RDWR` into one DLN-2
+  combined-transfer command. Its `master_xfer()` loop sends one DLN-2 command
+  per `i2c_msg`, either `DLN2_I2C_WRITE` or `DLN2_I2C_READ`.
+- Because of that Linux driver behavior, firmware-side `mem_addr_len` remains
+  unused by the current host path. The request fields are still parsed by the
+  S3 firmware, but Linux fills `mem_addr_len = 0` for both read and write
+  commands.
+- The current validated `I2C_RDWR` path is suitable for register-read devices
+  that accept a STOP between the register-address write and the data read.
+  Devices that require a strict repeated START would need a Linux driver path
+  using a DLN-2 combined-transfer command or another custom kernel change.
 - The C3 USB-Serial/JTAG path can need a short settling period after opening
   the TTY. The I2C script now waits after open and retries `PING` before
   starting the fixture.
@@ -339,6 +353,9 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - The C3 fixture has validated Linux `i2c-dln2` transfers at 100 kHz for 1,
   4, 16, 64, and 256 byte raw writes and reads. This covers the current
   firmware maximum transfer length.
+- The same fixture has validated two-message Linux `I2C_RDWR` register-style
+  reads through `/dev/i2c-4` for register bytes `0x00`, `0x10`, and `0x7f`,
+  with 1, 4, 16, 64, and 256 byte reads.
 
 ## Verification Notes
 
