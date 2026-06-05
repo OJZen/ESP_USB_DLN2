@@ -331,6 +331,14 @@ USB GPIO device.
   `errors=0`. No new kernel Oops or call trace appeared in the recent kernel
   log; only expected USB disconnect/re-enumeration messages from S3 flashing
   were present.
+- Committed the CPOL idle-prime fix as `71ed99b`, reflashed that clean commit
+  to `/dev/ttyACM1`, and user reloaded `spi_dln2_spidev_test.ko`.
+- Verified the clean `71ed99b` firmware after reload:
+  - mode 3 full-duplex lengths 1, 2, 16, and 256 bytes passed at 100 kHz.
+  - modes 0-3 full-duplex 256-byte transfers passed at 1 MHz.
+  - Linux SPI statistics reported `messages=8` and `errors=0` for the clean
+    final short regression.
+  - Recent kernel log contained no new Oops, call trace, or DLN-2/SPI error.
 
 ### 2026-06-04
 
