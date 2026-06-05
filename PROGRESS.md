@@ -24,6 +24,8 @@ USB GPIO device.
 - [x] M10: Validate the C3 closed-loop probe against the S3 DLN-2 GPIO device.
 - [x] M11: Harden DLN-2 USB bulk OUT request framing.
 - [x] M12: Reduce output-direction switching glitches.
+- [x] M13: Derive the GPIO IRQ, I2C, SPI, and ADC implementation plan from
+      Linux DLN-2 subdrivers and the `pico-usb-io-board` device reference.
 
 ## Log
 
@@ -71,6 +73,15 @@ USB GPIO device.
 - Rebuilt and flashed the updated S3 firmware to `/dev/ttyACM1`.
 - Verified `gpioget`, `gpioset`, and the C3 closed-loop test on S3 lines 0-6
   still pass.
+- Added `DLN2_IMPLEMENTATION_PLAN.md` to make the next feature phase
+  source-driven. The plan records the Linux command paths for GPIO IRQ
+  hardening, I2C, SPI, and ADC, and uses `notro/pico-usb-io-board` as the
+  device-side reference for module dispatch and pin ownership.
+- Confirmed the next required architectural step is a central ESP32-S3 pin
+  ownership layer before enabling I2C/SPI/ADC. Linux probes the GPIO subdriver
+  and enables all exported GPIO lines, so peripheral pins must either be
+  removed from the exported GPIO map or rejected cleanly as owned by another
+  module.
 
 ### 2026-06-04
 

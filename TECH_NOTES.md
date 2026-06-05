@@ -45,6 +45,30 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - Linux maps rising/falling edge IRQ types to device-side `CHANGE` events when
   calling `SET_EVENT_CFG`; it then filters rising/falling in the host callback
   by checking the event value.
+- For the multifunction phase, Linux driver source remains the protocol
+  authority. Implement only the commands actually used by mainline
+  `i2c-dln2`, `spi-dln2`, and `dln2-adc` first; unsupported DLN-2 commands
+  should continue to return explicit error responses.
+- `pico-usb-io-board` is useful as a device-side reference because it follows
+  this same minimal-command approach and has a small `dln2-pin.c` ownership
+  layer. The ownership model matters for ESP32-S3 because Linux creates the
+  GPIO, I2C, SPI, and ADC children unconditionally after MFD probing succeeds.
+- The Linux subdevice handles are not the same as command module IDs:
+  GPIO handle/module `2/0x01`, I2C `3/0x03`, SPI `4/0x02`, ADC `5/0x06`.
+  DLN-2 command IDs are encoded as `cmd | (module << 8)`.
+- Minimal I2C Linux path:
+  `ENABLE`, `WRITE`, `READ`, and `DISABLE`; command IDs are
+  `DLN2_CMD(0x01, 0x03)`, `DLN2_CMD(0x06, 0x03)`,
+  `DLN2_CMD(0x07, 0x03)`, and `DLN2_CMD(0x02, 0x03)`.
+- Minimal SPI Linux path includes probe commands `DISABLE`, `GET_SS_COUNT`,
+  `GET_MIN_FREQUENCY`, `GET_MAX_FREQUENCY`, `GET_SUPPORTED_FRAME_SIZES`,
+  `SS_MULTI_ENABLE`, and `ENABLE`, plus runtime `SET_SS`, `SET_FREQUENCY`,
+  `SET_MODE`, `SET_FRAME_SIZE`, `READ_WRITE`, `READ`, and `WRITE`.
+- Minimal ADC Linux raw-read path includes `SET_RESOLUTION`,
+  `GET_CHANNEL_COUNT`, `CHANNEL_ENABLE`, `ENABLE`, `CHANNEL_GET_VAL`,
+  `DISABLE`, and `CHANNEL_DISABLE`. The Linux driver sends value `10` in the
+  second byte of `SET_RESOLUTION`; despite the struct field name, this is the
+  requested ADC resolution in bits.
 
 ## Implemented USB Shape
 
