@@ -50,6 +50,8 @@ USB GPIO device.
 - [x] M26: Validate DLN-2 I2C runtime transfers against the C3 fixture.
 - [x] M27: Validate Linux `I2C_RDWR` register-style reads against the C3 I2C
       fixture.
+- [x] M28: Validate common Linux `I2C_SMBUS` ioctl paths against the C3 I2C
+      fixture.
 
 ## Log
 
@@ -393,6 +395,20 @@ USB GPIO device.
   that tolerate a STOP between address write and data read can work through the
   current mainline `i2c-dln2` path; strict repeated-start-only devices would
   need kernel-driver work, not just firmware changes.
+- Extended `scripts/i2c_c3_slave_test.py` with Linux `I2C_SMBUS` ioctl
+  support using the UAPI `struct i2c_smbus_ioctl_data` and
+  `union i2c_smbus_data` layouts.
+- Verified common SMBus emulation paths exposed by `i2c-dln2`:
+  - receive byte and send byte.
+  - read/write byte data.
+  - read/write word data.
+  - read/write I2C block data.
+- The SMBus matrix used command bytes `0x00`, `0x10`, and `0x7f`, and I2C
+  block lengths 1, 4, 16, and 32 bytes. C3 captured expected host writes and
+  host reads matched the C3 preloaded pattern.
+- Ran a final short all-path I2C regression combining raw read/write,
+  `I2C_RDWR`, and `I2C_SMBUS` in one script invocation. It reported
+  `PASS I2C transfer matrix`.
 
 ### 2026-06-04
 

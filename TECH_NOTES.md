@@ -356,6 +356,24 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - The same fixture has validated two-message Linux `I2C_RDWR` register-style
   reads through `/dev/i2c-4` for register bytes `0x00`, `0x10`, and `0x7f`,
   with 1, 4, 16, 64, and 256 byte reads.
+- `scripts/i2c_c3_slave_test.py` now also drives the Linux `I2C_SMBUS` ioctl.
+  It uses the UAPI layouts from `linux/i2c-dev.h` and `linux/i2c.h`:
+  `struct i2c_smbus_ioctl_data` points at `union i2c_smbus_data`, whose block
+  field stores length in `block[0]`.
+- Validated SMBus operations:
+  - `I2C_SMBUS_BYTE`: receive byte and send byte.
+  - `I2C_SMBUS_BYTE_DATA`: command-plus-byte read and write.
+  - `I2C_SMBUS_WORD_DATA`: command-plus-little-endian-word read and write.
+  - `I2C_SMBUS_I2C_BLOCK_DATA`: command-plus-block read and write up to the
+    SMBus 32-byte block limit.
+- SMBus block writes observed by the C3 are `command + payload`; the Linux
+  I2C block protocol length byte is an ioctl-side value and is not placed on
+  the I2C bus for `I2C_SMBUS_I2C_BLOCK_DATA`.
+- The current validation intentionally does not claim strict SMBus block read
+  or block process call support. Mainline `i2c-dln2` advertises
+  `I2C_FUNC_SMBUS_BLOCK_PROC_CALL`, but its transfer function only handles
+  fixed-length read messages; variable-length `I2C_M_RECV_LEN` behavior needs
+  separate kernel-level scrutiny before relying on it.
 
 ## Verification Notes
 
