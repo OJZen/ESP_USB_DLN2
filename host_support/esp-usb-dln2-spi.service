@@ -1,0 +1,9 @@
+[Unit]
+Description=Prepare ESP USB DLN2 SPI spidev child and device permissions
+Documentation=man:udev(7)
+After=systemd-udevd.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/esp_usb_dln2/host.conf
+ExecStart=/usr/local/libexec/esp_usb_dln2/esp_usb_dln2_setup_host_device.sh

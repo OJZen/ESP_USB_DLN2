@@ -53,6 +53,7 @@ USB GPIO device.
 - [x] M28: Validate common Linux `I2C_SMBUS` ioctl paths against the C3 I2C
       fixture.
 - [x] M29: Validate I2C error recovery and short mixed-transfer stability.
+- [x] M30: Add host support packaging to reduce post-plug setup complexity.
 
 ## Log
 
@@ -426,6 +427,27 @@ USB GPIO device.
   `0x10`, and `0x7f`.
 - The stress script reported `PASS I2C stability test` and stopped the C3 I2C
   fixture cleanly.
+- Added a host support package intended to make normal use a one-time install
+  followed by plug-and-use:
+  - `scripts/install_host_support.sh` builds and installs the SPI helper for
+    the running kernel, installs udev rules, installs a systemd oneshot, and
+    installs a readiness check command.
+  - `host_support/99-esp-usb-dln2.rules.in` grants access to DLN-2 GPIO, I2C,
+    IIO, and spidev nodes and triggers the setup service when the USB device
+    is plugged in.
+  - `host_support/esp-usb-dln2-spi.service` runs the host setup script from
+    systemd/udev.
+  - `scripts/esp_usb_dln2_setup_host_device.sh` finds the Linux `dln2-spi`
+    master, reloads stale `spi_dln2_spidev_test` state if needed, registers
+    the `spidev` child, and adjusts DLN-2 device permissions.
+  - `scripts/check_device_ready.sh` reports whether USB, GPIO, I2C, SPI, and
+    IIO nodes are present and accessible.
+- Added `HOST_SUPPORT.md` documenting the one-time install flow:
+  `sudo ./scripts/install_host_support.sh`, then `esp-usb-dln2-check`.
+- Validated host support scripts with `bash -n` and `git diff --check`.
+- Ran the readiness check before installing host support. It correctly reports
+  the current lab state: USB/GPIO/I2C/SPI-master/IIO are present, while spidev
+  and IIO/I2C user permissions still need the host support install.
 
 ### 2026-06-04
 

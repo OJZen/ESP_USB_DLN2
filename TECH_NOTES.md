@@ -387,6 +387,34 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   session. This is a short functional soak, not yet a long-duration endurance
   test.
 
+## Host Support Package
+
+- Linux automatically creates the DLN-2 GPIO, I2C, SPI controller, and IIO ADC
+  children, but it does not create a generic `/dev/spidev*` node for a bare SPI
+  controller. The host support package keeps that policy boundary explicit and
+  provides a host-side SPI child registrar.
+- `scripts/install_host_support.sh` is the intended one-time setup entrypoint.
+  It must run as root, builds `tools/spi_test_device/spi_dln2_spidev_test.ko`
+  against the running kernel, copies it to `/usr/local/lib/esp_usb_dln2/`, and
+  installs udev/systemd support files.
+- `host_support/99-esp-usb-dln2.rules.in` matches VID/PID `a257:2013` and
+  triggers `esp-usb-dln2-spi.service` on USB add. It also sets permissions for
+  DLN-2 GPIO, I2C, IIO, and spidev nodes.
+- `scripts/esp_usb_dln2_setup_host_device.sh` is the root-side systemd
+  oneshot. It finds a `/sys/class/spi_master/spi*` whose parent driver is
+  `dln2-spi`, registers CS0 with the `dh2228fv` modalias accepted by mainline
+  `spidev`, and fixes permissions for current DLN-2 nodes.
+- The setup script handles the common stale state where
+  `spi_dln2_spidev_test` is loaded but `/dev/spidev*` disappeared after S3 USB
+  re-enumeration. If the helper is not in use, it unloads and reloads it
+  against the current `dln2-spi` master.
+- Default access group is `plugdev`, configurable at install time with
+  `sudo ./scripts/install_host_support.sh --group GROUP` or afterward through
+  `/etc/esp_usb_dln2/host.conf`.
+- `scripts/check_device_ready.sh` is the user-facing diagnostic. It checks
+  USB presence, GPIO by-id link, DLN-2 I2C adapter, DLN-2 SPI master,
+  `/dev/spidev*`, DLN-2 IIO ADC, and basic read/write permissions.
+
 ## Verification Notes
 
 - The host automatically bound the mainline `dln2` driver with VID/PID

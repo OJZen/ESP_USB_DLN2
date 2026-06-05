@@ -1,0 +1,9 @@
+# ESP USB DLN2 host support.
+# Installed by scripts/install_host_support.sh.
+
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="a257", ATTR{idProduct}=="2013", TAG+="systemd", ENV{SYSTEMD_WANTS}+="esp-usb-dln2-spi.service"
+
+SUBSYSTEM=="gpio", KERNEL=="gpiochip*", ATTRS{idVendor}=="a257", ATTRS{idProduct}=="2013", GROUP="@ACCESS_GROUP@", MODE="0660", TAG+="uaccess"
+SUBSYSTEM=="i2c-dev", KERNEL=="i2c-*", ATTR{name}=="dln2-i2c-*", GROUP="@ACCESS_GROUP@", MODE="0660", TAG+="uaccess"
+SUBSYSTEM=="iio", KERNEL=="iio:device*", ATTR{name}=="dln2-adc", GROUP="@ACCESS_GROUP@", MODE="0660", TAG+="uaccess"
+SUBSYSTEM=="spidev", KERNEL=="spidev*", ATTRS{idVendor}=="a257", ATTRS{idProduct}=="2013", GROUP="@ACCESS_GROUP@", MODE="0660", TAG+="uaccess"
