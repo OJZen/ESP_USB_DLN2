@@ -97,8 +97,11 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   non-zero I2C memory-address fields with `DLN2_RES_INVALID_VALUE` until a real
   host path needs that extension.
 - Host runtime I2C tests need read/write permission on `/dev/i2c-*`. On this
-  machine `/dev/i2c-4` is `root:i2c 660`, while user `jzen` is not in the
-  `i2c` group.
+  machine `/dev/i2c-4` is `root:i2c 660`; adding user `jzen` to group `i2c`
+  and running commands through `newgrp i2c` is enough for access.
+- `i2cdetect -y 4` warns that SMBus Quick is not supported because Linux
+  `i2c-dln2` does not advertise `I2C_FUNC_SMBUS_QUICK`. Use
+  `i2cdetect -r -y 4` for a complete read-byte scan.
 
 ## Implemented USB Shape
 

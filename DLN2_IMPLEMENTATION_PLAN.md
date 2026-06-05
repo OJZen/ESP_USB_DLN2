@@ -107,8 +107,9 @@ Current state:
 
 - I2C port `0` is implemented with ESP32-S3 GPIO38 as SDA and GPIO47 as SCL.
 - Linux adapter enumeration works; the current host creates `/dev/i2c-4`.
-- Runtime scanning/transfer tests still need host access to `/dev/i2c-4` and an
-  I2C target device.
+- Runtime read-byte scanning works through `newgrp i2c`; the current empty bus
+  reports no detected I2C target devices.
+- Transfer testing still needs an I2C target device.
 
 Linux probe path:
 
@@ -137,7 +138,7 @@ Next target:
 
 - Add a C3 I2C slave test firmware path or connect a simple external I2C
   device to S3 GPIO38/GPIO47.
-- Verify `i2cdetect` and at least one read/write transaction from Linux.
+- Verify at least one successful read/write transaction from Linux.
 
 Not needed for first Linux path:
 

@@ -118,9 +118,12 @@ USB GPIO device.
   - `/sys/class/i2c-dev/i2c-4/name` reports the same `dln2-i2c` adapter name.
   - `gpioget` on lines 0-17 succeeds.
   - The C3 closed-loop test still passes for wired lines 0-6.
-- Runtime I2C scanning with `i2cdetect -y 4` is not yet verified because the
-  host created `/dev/i2c-4` as `root:i2c` with mode `660`, the current user is
-  not in the `i2c` group, and passwordless sudo is not available.
+- After adding user `jzen` to the host `i2c` group, verified I2C runtime access
+  through `newgrp i2c`.
+- `i2cdetect -F 4` reports the Linux `dln2-i2c` adapter capability set.
+- `i2cdetect -r -y 4` completes a full read-byte scan of `/dev/i2c-4`; no
+  devices are present on the currently empty bus, so all probed addresses
+  report `--`.
 
 ### 2026-06-04
 
