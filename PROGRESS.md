@@ -42,6 +42,9 @@ USB GPIO device.
 - [x] M21: Verify DLN-2 SPI full-duplex transfers against the C3 fixture.
 - [x] M22: Verify full-size 256-byte DLN-2 SPI transfers through the DMA SPI
       firmware path.
+- [x] M23: Verify Linux `spi-dln2` read-only/write-only paths and SPI modes
+      0-2 against the C3 fixture.
+- [ ] M24: Resolve or explicitly scope the remaining SPI mode-3 behavior.
 
 ## Log
 
@@ -275,6 +278,36 @@ USB GPIO device.
     pattern for every tested transfer.
   - `/sys/bus/spi/devices/spi0.0/statistics` reports 4 messages, 640 TX bytes,
     640 RX bytes, and `errors=0` for the final retest run.
+- Extended the ESP32-C3 test firmware to version `c3-probe-v3`. `SPI START`
+  now accepts an optional SPI mode argument and restarts the C3 slave if the
+  requested mode changes.
+- Extended `scripts/spi_c3_slave_test.py` with `--mode 0..3` and
+  `--direction full|read|write` so the host can exercise Linux
+  `DLN2_SPI_READ_WRITE`, `DLN2_SPI_READ`, and `DLN2_SPI_WRITE` paths.
+- Updated the S3 SPI firmware so `DLN2_SPI_SET_FREQUENCY` and
+  `DLN2_SPI_SET_MODE` reconfigure the active ESP-IDF SPI device instead of
+  only updating firmware shadow state.
+- Rebuilt and flashed the updated C3 firmware to `/dev/ttyACM2`, then rebuilt
+  and flashed the updated S3 firmware to `/dev/ttyACM1`.
+- User reloaded `spi_dln2_spidev_test.ko` after S3 USB re-enumeration, and
+  `/dev/spidev0.0` was restored.
+- Verified SPI full-duplex 16-byte transfers at 100 kHz in modes 0, 1, and 2.
+- Verified SPI read-only and write-only transfers:
+  - mode 0, 16-byte and 256-byte read-only transfers passed.
+  - mode 0, 16-byte and 256-byte write-only transfers passed.
+  - modes 1 and 2, 16-byte read-only transfers passed.
+  - modes 1 and 2, 16-byte write-only transfers passed.
+- Re-ran a short SPI regression after the final documentation update:
+  modes 0/1/2 16-byte full-duplex plus mode 0 256-byte read-only/write-only
+  all passed. Linux SPI statistics reported `messages=17` and `errors=0`.
+- Hardened the S3 SPI reconfiguration failure path so a failed ESP-IDF
+  re-add leaves the DLN-2 SPI port disabled rather than enabled with a null
+  SPI device handle. This guard is build-verified in the S3 firmware and will
+  be present after the next S3 flash.
+- SPI mode 3 still fails against the current C3 fixture. The observed failure
+  is a one-bit/byte alignment mismatch where the C3 reports a 17-byte transfer
+  for a requested 16-byte transaction. Treat mode 3 as unresolved rather than
+  validated.
 
 ### 2026-06-04
 

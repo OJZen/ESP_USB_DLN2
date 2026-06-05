@@ -103,20 +103,30 @@ class C3Console:
         raise TimeoutError(f"no response for {line!r}")
 
 
-def spidev_transfer(path, tx_data, speed_hz):
+def spidev_transfer(path, tx_data, length, speed_hz, mode, direction):
     fd = os.open(path, os.O_RDWR)
     try:
-        fcntl.ioctl(fd, SPI_IOC_WR_MODE, struct.pack("B", 0))
+        fcntl.ioctl(fd, SPI_IOC_WR_MODE, struct.pack("B", mode))
         fcntl.ioctl(fd, SPI_IOC_WR_BITS_PER_WORD, struct.pack("B", 8))
         fcntl.ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, struct.pack("I", speed_hz))
 
-        tx = ctypes.create_string_buffer(bytes(tx_data))
-        rx = ctypes.create_string_buffer(len(tx_data))
+        tx = None
+        rx = None
+        tx_addr = 0
+        rx_addr = 0
+
+        if direction in ("full", "write"):
+            tx = ctypes.create_string_buffer(bytes(tx_data))
+            tx_addr = ctypes.addressof(tx)
+        if direction in ("full", "read"):
+            rx = ctypes.create_string_buffer(length)
+            rx_addr = ctypes.addressof(rx)
+
         transfer = struct.pack(
             "=QQIIHBBBBBB",
-            ctypes.addressof(tx),
-            ctypes.addressof(rx),
-            len(tx_data),
+            tx_addr,
+            rx_addr,
+            length,
             speed_hz,
             0,
             8,
@@ -127,6 +137,8 @@ def spidev_transfer(path, tx_data, speed_hz):
             0,
         )
         fcntl.ioctl(fd, spi_ioc_message(1), transfer)
+        if rx is None:
+            return None
         return bytes(rx.raw)
     finally:
         os.close(fd)
@@ -149,11 +161,20 @@ def main():
     parser.add_argument("--spidev", default="/dev/spidev0.0", help="Linux spidev node")
     parser.add_argument("--length", type=int, default=16, help="transfer length, 1..256")
     parser.add_argument("--speed", type=int, default=100000, help="SPI speed in Hz")
+    parser.add_argument("--mode", type=int, default=0, help="SPI mode, 0..3")
+    parser.add_argument(
+        "--direction",
+        choices=("full", "read", "write"),
+        default="full",
+        help="SPI transfer direction to exercise",
+    )
     parser.add_argument("--timeout-ms", type=int, default=5000, help="C3 SPI arm timeout")
     args = parser.parse_args()
 
     if args.length < 1 or args.length > SPI_TEST_MAX_BYTES:
         raise SystemExit("--length must be 1..256")
+    if args.mode < 0 or args.mode > 3:
+        raise SystemExit("--mode must be 0..3")
     if not os.path.exists(args.spidev):
         raise SystemExit(
             f"{args.spidev} does not exist. Build tools/spi_test_device and load it with sudo first."
@@ -166,11 +187,18 @@ def main():
     try:
         c3.drain()
         print(c3.command("PING"))
-        print(c3.command("SPI START"))
+        print(c3.command(f"SPI START {args.mode}"))
 
         c3.write(f"SPI XFER {args.length} {args.timeout_ms}")
         time.sleep(0.1)
-        rx_data = spidev_transfer(args.spidev, tx_data, args.speed)
+        rx_data = spidev_transfer(
+            args.spidev,
+            tx_data,
+            args.length,
+            args.speed,
+            args.mode,
+            args.direction,
+        )
 
         line = None
         deadline = time.monotonic() + (args.timeout_ms / 1000.0) + 1.0
@@ -188,20 +216,25 @@ def main():
             raise RuntimeError(line)
 
         c3_rx, c3_tx = parse_spi_xfer(line)
-        print(f"host_tx={tx_data.hex()} host_rx={rx_data.hex()}")
+        rx_hex = "<none>" if rx_data is None else rx_data.hex()
+        print(
+            f"mode={args.mode} direction={args.direction} "
+            f"host_tx={tx_data.hex()} host_rx={rx_hex}"
+        )
 
         ok = True
-        if rx_data != expected_miso:
+        if args.direction in ("full", "read") and rx_data != expected_miso:
             print(f"FAIL host_rx expected {expected_miso.hex()}", file=sys.stderr)
             ok = False
-        if c3_rx != tx_data:
-            print(f"FAIL c3_rx expected {tx_data.hex()}", file=sys.stderr)
+        expected_c3_rx = tx_data if args.direction in ("full", "write") else bytes(args.length)
+        if c3_rx != expected_c3_rx:
+            print(f"FAIL c3_rx expected {expected_c3_rx.hex()}", file=sys.stderr)
             ok = False
         if c3_tx != expected_miso:
             print(f"FAIL c3_tx expected {expected_miso.hex()}", file=sys.stderr)
             ok = False
 
-        print("PASS SPI full-duplex transfer" if ok else "FAIL SPI full-duplex transfer")
+        print("PASS SPI transfer" if ok else "FAIL SPI transfer")
         return 0 if ok else 1
     finally:
         try:

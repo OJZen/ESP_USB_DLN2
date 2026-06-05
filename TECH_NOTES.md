@@ -239,17 +239,18 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 
 ## ESP32-C3 SPI Fixture
 
-- `c3_test` version `c3-probe-v2` adds a command-driven SPI slave fixture while
-  preserving the GPIO probe protocol.
+- `c3_test` version `c3-probe-v3` is the current command-driven SPI slave
+  fixture while preserving the GPIO probe protocol. Version `v2` added the
+  fixture; `v3` added optional SPI mode selection.
 - SPI fixture pins:
   - C3 GPIO4: SCLK input from S3 GPIO10.
   - C3 GPIO5: MOSI input from S3 GPIO11.
   - C3 GPIO6: MISO output to S3 GPIO12.
   - C3 GPIO7: CS input from S3 GPIO13.
-- `SPI START` releases all GPIO probe pins to input first, then initializes C3
-  `SPI2_HOST` as an SPI mode-0 DMA slave with a maximum scripted transfer
-  length of 256 bytes. DMA is needed because ESP-IDF's non-DMA SPI slave path is
-  limited to the hardware FIFO size, 64 bytes.
+- `SPI START [mode]` releases all GPIO probe pins to input first, then
+  initializes C3 `SPI2_HOST` as a DMA SPI slave in mode 0-3 with a maximum
+  scripted transfer length of 256 bytes. DMA is needed because ESP-IDF's
+  non-DMA SPI slave path is limited to the hardware FIFO size, 64 bytes.
 - `SPI XFER <len> [timeout_ms]` arms exactly one SPI slave transaction. The C3
   sends a fixed MISO pattern `a0 a1 ...` and records the MOSI bytes received
   from the S3. The command response includes both `rx=<hex>` and `tx=<hex>` so
@@ -268,12 +269,29 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - If the generated `/dev/spidev0.0` is root-only, use
   `sudo chmod a+rw /dev/spidev0.0` for this temporary lab session.
 - Run the SPI fixture test with:
-  `./scripts/spi_c3_slave_test.py --c3 /dev/ttyACM2 --spidev /dev/spidev0.0 --length 16 --speed 100000`
+  `./scripts/spi_c3_slave_test.py --c3 /dev/ttyACM2 --spidev /dev/spidev0.0 --length 16 --speed 100000 --mode 0 --direction full`
 - Verified SPI fixture matrix: 10 kHz, 100 kHz, 500 kHz, and 1 MHz at transfer
   lengths 1, 4, 16, and 64 bytes all passed.
 - After switching both S3 SPI master and C3 SPI slave paths to DMA mode,
   256-byte transfers pass at 100 kHz and 1 MHz. This covers the advertised
   Linux `spi-dln2` maximum transfer size.
+- Linux `spi-dln2` applies userspace setup changes by disabling the port,
+  setting speed/mode/frame size, then enabling the port again. The S3 firmware
+  must apply speed and mode changes to the active ESP-IDF `spi_device_handle_t`;
+  updating only DLN-2 shadow state leaves the hardware transaction mode stale.
+- `scripts/spi_c3_slave_test.py --direction read` exercises Linux
+  `DLN2_SPI_READ`; the C3 should observe zero MOSI bytes while the Linux host
+  receives the C3 MISO pattern. `--direction write` exercises
+  `DLN2_SPI_WRITE`; the C3 verifies MOSI while host RX is intentionally absent.
+- SPI modes 0, 1, and 2 have passed 16-byte full-duplex validation at 100 kHz
+  against the C3 fixture, and modes 0-2 have also passed 16-byte read-only and
+  write-only validation.
+- SPI mode 0 has additionally passed 256-byte read-only and 256-byte write-only
+  validation.
+- SPI mode 3 is not validated yet. The current C3 fixture reports a 17-byte
+  capture for a requested 16-byte full-duplex transaction, with host/C3 data
+  shifted relative to the expected byte pattern. Keep mode 3 out of any
+  supported-configuration claim until this is understood.
 - Reflashing or unplugging the S3 DLN-2 USB device removes any temporary
   `spidev0.0` child created by `tools/spi_test_device`; reload the helper after
   the new `/sys/class/spi_master/spi0` appears.

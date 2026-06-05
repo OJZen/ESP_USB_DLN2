@@ -120,6 +120,63 @@ static void spi_release_bus_pins(void)
     dln2_pin_release(DLN2_SPI_SCLK_GPIO, DLN2_MODULE_SPI);
 }
 
+static void spi_drop_enabled_bus(void)
+{
+    esp_err_t err = spi_bus_free(DLN2_SPI_HOST);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "spi_bus_free failed while dropping SPI bus: %s",
+                 esp_err_to_name(err));
+    }
+
+    s_spi.enabled = false;
+    s_spi.dev = NULL;
+    s_spi.cs_active = false;
+    spi_release_bus_pins();
+}
+
+static esp_err_t spi_add_device(void)
+{
+    spi_device_interface_config_t dev_config = {
+        .clock_speed_hz = (int)s_spi.speed_hz,
+        .mode = s_spi.mode & DLN2_SPI_MODE_MASK,
+        .spics_io_num = -1,
+        .queue_size = 1,
+    };
+
+    return spi_bus_add_device(DLN2_SPI_HOST, &dev_config, &s_spi.dev);
+}
+
+static uint16_t spi_reconfigure_device(void)
+{
+    esp_err_t err;
+
+    if (!s_spi.enabled) {
+        return DLN2_RES_SUCCESS;
+    }
+
+    spi_cs_set_active(false);
+
+    err = spi_bus_remove_device(s_spi.dev);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "spi_bus_remove_device failed while reconfiguring: %s",
+                 esp_err_to_name(err));
+        return DLN2_RES_FAIL;
+    }
+    s_spi.dev = NULL;
+
+    err = spi_add_device();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "spi_bus_add_device failed while reconfiguring: %s",
+                 esp_err_to_name(err));
+        spi_drop_enabled_bus();
+        return DLN2_RES_FAIL;
+    }
+
+    ESP_LOGI(TAG, "reconfigured SPI speed=%u mode=%u",
+             (unsigned)s_spi.speed_hz, s_spi.mode);
+    return DLN2_RES_SUCCESS;
+}
+
 static uint16_t spi_enable_bus(void)
 {
     spi_bus_config_t bus_config = {
@@ -129,12 +186,6 @@ static uint16_t spi_enable_bus(void)
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
         .max_transfer_sz = DLN2_SPI_MAX_XFER_SIZE,
-    };
-    spi_device_interface_config_t dev_config = {
-        .clock_speed_hz = (int)s_spi.speed_hz,
-        .mode = s_spi.mode & DLN2_SPI_MODE_MASK,
-        .spics_io_num = -1,
-        .queue_size = 1,
     };
     uint16_t result;
     esp_err_t err;
@@ -159,7 +210,7 @@ static uint16_t spi_enable_bus(void)
         return DLN2_RES_FAIL;
     }
 
-    err = spi_bus_add_device(DLN2_SPI_HOST, &dev_config, &s_spi.dev);
+    err = spi_add_device();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "spi_bus_add_device failed: %s", esp_err_to_name(err));
         spi_bus_free(DLN2_SPI_HOST);
@@ -334,6 +385,11 @@ static size_t spi_set_frequency(const dln2_request_t *request,
 
     speed = spi_clamp_speed(dln2_get_le32(request->payload + 1));
     s_spi.speed_hz = speed;
+    uint16_t result = spi_reconfigure_device();
+    if (result != DLN2_RES_SUCCESS) {
+        return dln2_make_response(request, result, NULL, 0, response,
+                                  response_cap);
+    }
 
     dln2_put_le32(payload, speed);
     ESP_LOGI(TAG, "set frequency=%u", (unsigned)s_spi.speed_hz);
@@ -365,6 +421,12 @@ static size_t spi_set_mode(const dln2_request_t *request, uint8_t *response,
     }
 
     s_spi.mode = mode;
+    uint16_t result = spi_reconfigure_device();
+    if (result != DLN2_RES_SUCCESS) {
+        return dln2_make_response(request, result, NULL, 0, response,
+                                  response_cap);
+    }
+
     ESP_LOGI(TAG, "set mode=%u", s_spi.mode);
     return dln2_make_response(request, DLN2_RES_SUCCESS, NULL, 0, response,
                               response_cap);
@@ -514,7 +576,7 @@ static uint16_t spi_check_transfer(uint8_t port, uint16_t size)
         return DLN2_RES_INVALID_PORT_NUMBER;
     }
 
-    if (!s_spi.enabled || !s_spi.cs_enabled) {
+    if (!s_spi.enabled || !s_spi.cs_enabled || s_spi.dev == NULL) {
         return DLN2_RES_FAIL;
     }
 

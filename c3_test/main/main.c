@@ -16,7 +16,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#define C3_TEST_VERSION "c3-probe-v2"
+#define C3_TEST_VERSION "c3-probe-v3"
 #define MAX_LINE_LEN 128
 #define SPI_TEST_HOST SPI2_HOST
 #define SPI_TEST_SCLK_GPIO GPIO_NUM_4
@@ -43,6 +43,7 @@ static const gpio_num_t s_channels[] = {
 static uint32_t s_output_enable_mask;
 static uint32_t s_output_value_mask;
 static bool s_spi_active;
+static uint8_t s_spi_mode;
 static uint32_t s_spi_xfer_count;
 static uint32_t s_spi_last_len;
 DMA_ATTR static uint8_t s_spi_last_rx[SPI_TEST_MAX_BYTES];
@@ -158,10 +159,21 @@ static esp_err_t spi_test_stop(void)
     return err;
 }
 
-static esp_err_t spi_test_start(void)
+static esp_err_t spi_test_start(uint32_t mode)
 {
+    if (mode > 3) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
     if (s_spi_active) {
-        return ESP_OK;
+        if (s_spi_mode == mode) {
+            return ESP_OK;
+        }
+
+        esp_err_t err = spi_test_stop();
+        if (err != ESP_OK) {
+            return err;
+        }
     }
 
     esp_err_t err = set_inputs(ALL_CHANNELS_MASK);
@@ -181,7 +193,7 @@ static esp_err_t spi_test_start(void)
         .spics_io_num = SPI_TEST_CS_GPIO,
         .flags = 0,
         .queue_size = 1,
-        .mode = 0,
+        .mode = (uint8_t)mode,
     };
 
     gpio_set_pull_mode(SPI_TEST_MOSI_GPIO, GPIO_PULLUP_ONLY);
@@ -192,6 +204,7 @@ static esp_err_t spi_test_start(void)
                                SPI_DMA_CH_AUTO);
     if (err == ESP_OK) {
         s_spi_active = true;
+        s_spi_mode = (uint8_t)mode;
         s_spi_last_len = 0;
         s_spi_xfer_count = 0;
     }
@@ -201,7 +214,7 @@ static esp_err_t spi_test_start(void)
 static esp_err_t spi_test_xfer(uint32_t len, uint32_t timeout_ms)
 {
     if (!s_spi_active) {
-        esp_err_t err = spi_test_start();
+        esp_err_t err = spi_test_start(s_spi_mode);
         if (err != ESP_OK) {
             return err;
         }
@@ -338,16 +351,17 @@ static void print_status(void)
 {
     printf("OK STATUS mode=0x%02" PRIx32 " out=0x%02" PRIx32
            " read=0x%02" PRIx32 " spi=%s spi_count=%" PRIu32
-           " spi_len=%" PRIu32 "\n",
+           " spi_len=%" PRIu32 " spi_mode=%u\n",
            s_output_enable_mask, s_output_value_mask, read_mask(),
-           s_spi_active ? "on" : "off", s_spi_xfer_count, s_spi_last_len);
+           s_spi_active ? "on" : "off", s_spi_xfer_count, s_spi_last_len,
+           s_spi_mode);
 }
 
 static void print_spi_status(void)
 {
-    printf("OK SPI STATUS active=%" PRIu32 " count=%" PRIu32 " len=%" PRIu32
-           " rx=",
-           (uint32_t)(s_spi_active ? 1 : 0), s_spi_xfer_count,
+    printf("OK SPI STATUS active=%" PRIu32 " mode=%u count=%" PRIu32
+           " len=%" PRIu32 " rx=",
+           (uint32_t)(s_spi_active ? 1 : 0), s_spi_mode, s_spi_xfer_count,
            s_spi_last_len);
     print_hex(s_spi_last_rx, s_spi_last_len);
     printf(" tx=");
@@ -415,12 +429,16 @@ static void process_line(char *line)
         }
 
         if (strcmp(subcmd, "START") == 0) {
-            esp_err_t err = spi_test_start();
+            uint32_t mode = 0;
+            parse_u32(&cursor, &mode);
+
+            esp_err_t err = spi_test_start(mode);
             if (err != ESP_OK) {
                 printf("ERR SPI START %s\n", esp_err_to_name(err));
                 return;
             }
-            printf("OK SPI START sclk=%d mosi=%d miso=%d cs=%d max=%d\n",
+            printf("OK SPI START mode=%u sclk=%d mosi=%d miso=%d cs=%d max=%d\n",
+                   s_spi_mode,
                    (int)SPI_TEST_SCLK_GPIO, (int)SPI_TEST_MOSI_GPIO,
                    (int)SPI_TEST_MISO_GPIO, (int)SPI_TEST_CS_GPIO,
                    SPI_TEST_MAX_BYTES);
@@ -543,7 +561,7 @@ static void process_line(char *line)
     }
 
     if (strcmp(cmd, "HELP") == 0) {
-        printf("OK HELP PING MAP STATUS READ RESET IN <mask> DRIVE <mask> <value> PULSE <mask> <count> <high_ms> <low_ms> SPI START|STOP|STATUS|XFER <len> [timeout_ms]\n");
+        printf("OK HELP PING MAP STATUS READ RESET IN <mask> DRIVE <mask> <value> PULSE <mask> <count> <high_ms> <low_ms> SPI START [mode]|STOP|STATUS|XFER <len> [timeout_ms]\n");
         return;
     }
 
