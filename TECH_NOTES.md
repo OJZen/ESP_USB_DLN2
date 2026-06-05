@@ -263,11 +263,12 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   the mainline `spidev` driver.
 - A generic `spidev` modalias can leave `spi0.0` present but unbound on this
   host. Use the helper default `dh2228fv` unless debugging the binding path.
-- Loading the temporary SPI test device:
+- Normal SPI userspace setup now goes through
+  `sudo ./scripts/install_host_support.sh`, which builds and installs this
+  helper, starts the setup service, and fixes permissions. The older manual
+  debug sequence was:
   `sudo modprobe spidev`
   `sudo insmod tools/spi_test_device/spi_dln2_spidev_test.ko bus_num=0 chip_select=0 max_speed_hz=100000`
-- If the generated `/dev/spidev0.0` is root-only, use
-  `sudo chmod a+rw /dev/spidev0.0` for this temporary lab session.
 - Run the SPI fixture test with:
   `./scripts/spi_c3_slave_test.py --c3 /dev/ttyACM2 --spidev /dev/spidev0.0 --length 16 --speed 100000 --mode 0 --direction full`
 - Verified SPI fixture matrix: 10 kHz, 100 kHz, 500 kHz, and 1 MHz at transfer

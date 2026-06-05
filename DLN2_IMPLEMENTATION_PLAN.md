@@ -50,10 +50,12 @@ minimal command coverage and resource ownership.
 5. Implement ADC direct raw reads. Add buffered ADC event support only after raw
    IIO sysfs reads are stable.
 
-Current status: steps 1-5 are implemented enough for Linux GPIO, I2C adapter,
-SPI master enumeration, ADC IIO raw sysfs reads, and the firmware side of ADC
-triggered-buffer events. I2C/SPI still need successful target-device transfer
-validation. ADC buffered sample reads are verified through the host IIO device.
+Current status: steps 1-5 are implemented and validated enough for the current
+Linux bring-up target. GPIO line control and IRQ events, I2C transfers, SPI
+transfers, ADC raw reads, and ADC buffered reads have all passed host-side
+tests. Remaining work is mostly around packaging, endurance testing, repeated
+electrical validation, and deciding how much non-Linux DLN-2 API surface to
+support.
 
 ## Resource Ownership
 
@@ -111,9 +113,15 @@ Current state:
 
 - I2C port `0` is implemented with ESP32-S3 GPIO38 as SDA and GPIO47 as SCL.
 - Linux adapter enumeration works; the current host creates `/dev/i2c-4`.
-- Runtime read-byte scanning works through `newgrp i2c`; the current empty bus
-  reports no detected I2C target devices.
-- Transfer testing still needs an I2C target device.
+- C3 fixture testing validated raw read/write lengths 1, 4, 16, 64, and
+  256 bytes at 100 kHz.
+- Linux `I2C_RDWR` two-message register-style reads are validated for register
+  bytes `0x00`, `0x10`, and `0x7f` with read lengths 1, 4, 16, 64, and
+  256 bytes.
+- Common SMBus ioctl paths are validated: receive/send byte, byte data, word
+  data, and I2C block data up to 32 bytes.
+- A short 50-cycle mixed stress test validated failure recovery after accesses
+  to an unused address.
 
 Linux probe path:
 
@@ -140,9 +148,9 @@ Runtime transfer path:
 
 Next target:
 
-- Add a C3 I2C slave test firmware path or connect a simple external I2C
-  device to S3 GPIO38/GPIO47.
-- Verify at least one successful read/write transaction from Linux.
+- Add a longer I2C endurance test if this is going to be used as a daily tool.
+- Test representative real I2C devices, especially devices that care about
+  strict repeated-START behavior.
 
 Not needed for first Linux path:
 
@@ -161,9 +169,11 @@ Current state:
   has those physical pins available for SPI.
 - Linux controller enumeration works; the current host creates
   `/sys/class/spi_master/spi0`.
-- Transfer testing still needs a C3 SPI slave fixture or a known external SPI
-  device. The host does not create `/dev/spidev*` automatically for a bare SPI
-  master.
+- The host support package registers a temporary `spidev` child on the DLN-2
+  SPI controller for lab userspace transfers.
+- C3 SPI fixture validation passed modes 0-3, 100 kHz and 1 MHz, lengths 1, 2,
+  16, and 256 bytes. Mode 3 read-only and write-only paths also passed at those
+  lengths.
 
 Linux probe path:
 
@@ -218,9 +228,9 @@ Runtime transfer path:
 
 Next target:
 
-- Add a C3 SPI slave test firmware path or connect a simple external SPI
-  device to S3 GPIO10-GPIO13.
-- Verify at least one successful SPI transfer from Linux.
+- Validate with representative real SPI devices.
+- Decide whether to keep the host-side `spidev` helper as the long-term user
+  story or move toward a more product-specific Linux device description.
 
 ## ADC Minimal Implementation
 
@@ -234,7 +244,8 @@ Current state:
 - Firmware support exists for the Linux triggered-buffer path:
   `CHANNEL_SET_CFG`, periodic `CONDITION_MET_EV`, and `GET_ALL_VAL`.
 - Host buffered sample reads through `/dev/iio:device0` were verified with
-  `scripts/iio_adc_buffer_test.py` under `sudo`.
+  `scripts/iio_adc_buffer_test.py`. After installing host support, the IIO
+  character device and buffer sysfs controls are writable by user `jzen`.
 
 Linux probe path:
 
@@ -282,5 +293,5 @@ Buffered read path:
 
 Next target:
 
-- Add a C3 or external analog fixture if repeatable ADC electrical validation
-  is needed.
+- Add a C3 DAC/PWM-filter or external analog fixture if repeatable ADC
+  electrical validation is needed.

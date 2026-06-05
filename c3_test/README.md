@@ -1,7 +1,8 @@
-# ESP32-C3 GPIO Test Probe
+# ESP32-C3 Test Fixture
 
-This firmware turns an ESP32-C3 board into a small USB-Serial/JTAG controlled
-GPIO probe for testing the ESP32-S3 DLN-2 GPIO firmware.
+This firmware turns an ESP32-C3 board into a USB-Serial/JTAG controlled test
+fixture for the ESP32-S3 DLN-2 firmware. It currently supports GPIO probing,
+SPI slave testing, and I2C slave testing.
 
 ## Default Channels
 
@@ -41,11 +42,11 @@ All signal lines should use a series resistor between C3 and S3. Use 1 kOhm to
 Also connect C3 GND to S3 GND. If both boards are powered by USB, do not
 connect their 5 V rails together.
 
-This default wiring covers S3 DLN lines 0-7. To test S3 lines 8-17 later, move
-the same eight C3 probe channels to another batch of S3 GPIOs and pass those
-Linux line offsets to the host test script with `--lines`.
+This default wiring covers S3 DLN lines 0-7. To test the remaining current
+S3 DLN lines 8-9 later, move two C3 probe channels to those S3 GPIOs and pass
+those Linux line offsets to the host test script with `--lines`.
 
-## Serial Commands
+## GPIO Serial Commands
 
 The firmware accepts newline-terminated commands on the ESP-IDF console port at
 115200 baud. The project defaults this console to the C3 USB-Serial/JTAG port
@@ -59,13 +60,44 @@ with `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y`.
 - `IN <mask>`
 - `DRIVE <mask> <value>`
 - `PULSE <mask> <count> <high_ms> <low_ms>`
+- `I2C START [addr]|STOP|STATUS|RX <len>|LOAD <len>`
+- `SPI START [mode]|STOP|STATUS|XFER <len> [timeout_ms]`
 
 Masks use C3 channel bits. For example, channel 0 is bit `0x01`, channel 7 is
 bit `0x80`.
 
-`RESET` returns all channels to input with pulldown enabled. `PULSE` drives the
-selected channel mask for the requested pulse train and then releases those
-channels back to input.
+`RESET` returns all GPIO probe channels to input with pulldown enabled.
+`PULSE` drives the selected channel mask for the requested pulse train and then
+releases those channels back to input.
+
+## I2C Fixture Wiring
+
+Use 3.3 V pullups on SDA and SCL. Around 4.7 kOhm is a good default. Do not
+pull the bus up to 5 V.
+
+| C3 signal | C3 GPIO | S3 signal | S3 GPIO |
+| --- | --- | --- | --- |
+| SDA | GPIO0 | SDA | GPIO38 |
+| SCL | GPIO1 | SCL | GPIO47 |
+| GND | GND | GND | GND |
+
+The default slave address is `0x52`.
+
+## SPI Fixture Wiring
+
+The SPI fixture uses the C3 as a SPI slave and the S3 as the DLN-2-backed Linux
+SPI master.
+
+| C3 signal | C3 GPIO | S3 signal | S3 GPIO |
+| --- | --- | --- | --- |
+| SCLK | GPIO4 | SCLK | GPIO10 |
+| MOSI | GPIO5 | MOSI | GPIO11 |
+| MISO | GPIO6 | MISO | GPIO12 |
+| CS | GPIO7 | CS0 | GPIO13 |
+| GND | GND | GND | GND |
+
+Use short wires. Series resistors on push-pull SPI lines are acceptable for lab
+protection; 1 kOhm to 2.2 kOhm has worked in this setup.
 
 ## Build
 
@@ -86,7 +118,7 @@ Use the C3 board's own serial port. The S3 board has been using
 idf.py -C c3_test -p <C3_PORT> flash monitor
 ```
 
-The firmware prints `READY c3-gpio-probe-v1 channels=8` when it is running.
+The firmware prints `READY c3-probe-v4 channels=8` when it is running.
 
 ## Closed-Loop Test
 
@@ -110,3 +142,26 @@ The script uses the existing S3 DLN-2 GPIO device at
 - C3 output, observed by S3 input through Linux `gpiod`.
 - C3 pulse generation on every selected channel, observed by Linux `gpiomon`
   events.
+
+## SPI Fixture Test
+
+After wiring SPI and installing host support on the Linux host:
+
+```bash
+./scripts/spi_c3_slave_test.py --c3 /dev/ttyACM2 --spidev /dev/spidev0.0 --mode 0 --speed 100000 --length 16 --direction full
+```
+
+The script can also test `--direction read` and `--direction write`, SPI modes
+0-3, and transfer lengths up to 256 bytes.
+
+## I2C Fixture Test
+
+After wiring I2C with 3.3 V pullups:
+
+```bash
+./scripts/i2c_c3_slave_test.py --c3 /dev/ttyACM2 --addr 0x52 --lengths "16"
+./scripts/i2c_c3_stress_test.py --c3 /dev/ttyACM2 --addr 0x52 --bad-addr 0x53 --cycles 50
+```
+
+The I2C test script auto-detects the DLN-2 I2C adapter by scanning
+`/sys/class/i2c-dev/i2c-*/name` for `dln2-i2c`.

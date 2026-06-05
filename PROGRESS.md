@@ -54,6 +54,8 @@ USB GPIO device.
       fixture.
 - [x] M29: Validate I2C error recovery and short mixed-transfer stability.
 - [x] M30: Add host support packaging to reduce post-plug setup complexity.
+- [x] M31: Add a root README and refresh documentation to match the current
+      GPIO/I2C/SPI/ADC validation state.
 
 ## Log
 
@@ -471,6 +473,15 @@ USB GPIO device.
   readable/writable, I2C readable/writable, DLN-2 SPI master present,
   `/dev/spidev0.0` readable/writable, IIO character device readable/writable,
   and IIO buffer sysfs writable by `jzen`.
+- Added a root `README.md` covering project purpose, implemented features,
+  pin map, build/flash flow, host setup, usage examples, safety notes, known
+  issues, and the documentation map.
+- Refreshed `DLN2_IMPLEMENTATION_PLAN.md` to reflect that I2C and SPI transfer
+  validation has passed with the C3 fixtures.
+- Refreshed `c3_test/README.md` so it describes the current `c3-probe-v4`
+  GPIO/I2C/SPI fixture instead of only the original GPIO probe.
+- Marked the older manual SPI helper load sequence in `TECH_NOTES.md` as a
+  debug path; normal users should use `scripts/install_host_support.sh`.
 
 ### 2026-06-04
 
