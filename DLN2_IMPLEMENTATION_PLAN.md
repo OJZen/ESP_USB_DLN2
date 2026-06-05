@@ -50,6 +50,10 @@ minimal command coverage and resource ownership.
 5. Implement ADC direct raw reads. Add buffered ADC event support only after raw
    IIO sysfs reads are stable.
 
+Current status: steps 1-4 are implemented enough for Linux GPIO, I2C adapter,
+and SPI master enumeration. I2C/SPI still need successful target-device
+transfer validation, and ADC implementation has not started.
+
 ## Resource Ownership
 
 Current state:
@@ -149,6 +153,18 @@ Not needed for first Linux path:
 
 ## SPI Minimal Implementation
 
+Current state:
+
+- SPI port `0` is implemented with ESP32-S3 GPIO10 as SCLK, GPIO11 as MOSI,
+  GPIO12 as MISO, and GPIO13 as CS0.
+- GPIO10-GPIO13 are removed from the exported GPIO map, so the Linux GPIO chip
+  now exposes 14 lines.
+- Linux controller enumeration works; the current host creates
+  `/sys/class/spi_master/spi0`.
+- Transfer testing still needs a C3 SPI slave fixture or a known external SPI
+  device. The host does not create `/dev/spidev*` automatically for a bare SPI
+  master.
+
 Linux probe path:
 
 - `DLN2_SPI_DISABLE` (`DLN2_CMD(0x12, 0x02)`)
@@ -200,14 +216,11 @@ Runtime transfer path:
   - TX: `u8 port`, `u16 size`, `u8 attr`, `u8 buf[size]`
   - RX: no payload
 
-First target:
+Next target:
 
-- One SPI port, one CS.
-- 8 bits per word first; advertise only 8-bit support initially unless Linux
-  requires more.
-- SPI mode 0-3 by mapping CPOL/CPHA into ESP-IDF SPI settings.
-- Validate with C3 SPI slave firmware or `spidev` plus a known loopback-safe
-  fixture.
+- Add a C3 SPI slave test firmware path or connect a simple external SPI
+  device to S3 GPIO10-GPIO13.
+- Verify at least one successful SPI transfer from Linux.
 
 ## ADC Minimal Implementation
 

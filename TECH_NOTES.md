@@ -86,7 +86,7 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   successfully.
 - The first I2C port uses ESP32-S3 GPIO38 for SDA and GPIO47 for SCL. The WeAct
   ESP32S3-A schematic exposes both pins on the headers, and neither pin is in
-  the current 18-line GPIO export.
+  the current GPIO export.
 - `DLN2_I2C_ENABLE` is enough for the Linux `i2c-dln2` probe to register an
   adapter. With GPIO38/GPIO47 available, Linux now creates `/dev/i2c-4` with
   name `dln2-i2c-3-2.1.2:1.0-0` on the current host.
@@ -102,6 +102,16 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - `i2cdetect -y 4` warns that SMBus Quick is not supported because Linux
   `i2c-dln2` does not advertise `I2C_FUNC_SMBUS_QUICK`. Use
   `i2cdetect -r -y 4` for a complete read-byte scan.
+- SPI port 0 uses ESP32-S3 GPIO10 as SCLK, GPIO11 as MOSI, GPIO12 as MISO, and
+  GPIO13 as CS0. These pins were removed from the exported GPIO map before
+  enabling `spi-dln2`; otherwise `gpio-dln2` claims them during probe and SPI
+  enable would fail with `DLN2_RES_PIN_IN_USE`.
+- The SPI firmware advertises one chip select, 10 kHz to 10 MHz, and only
+  8-bit frame size support. Linux `spi-dln2` accepts this and registers
+  `/sys/class/spi_master/spi0`.
+- A Linux SPI controller does not automatically create `/dev/spidev*`. Actual
+  SPI transfer tests need a described SPI slave device or a C3 SPI slave test
+  fixture.
 
 ## Implemented USB Shape
 
@@ -133,16 +143,12 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 | 5          | GPIO7         |
 | 6          | GPIO8         |
 | 7          | GPIO9         |
-| 8          | GPIO10        |
-| 9          | GPIO11        |
-| 10         | GPIO12        |
-| 11         | GPIO13        |
-| 12         | GPIO14        |
-| 13         | GPIO15        |
-| 14         | GPIO16        |
-| 15         | GPIO17        |
-| 16         | GPIO18        |
-| 17         | GPIO21        |
+| 8          | GPIO14        |
+| 9          | GPIO15        |
+| 10         | GPIO16        |
+| 11         | GPIO17        |
+| 12         | GPIO18        |
+| 13         | GPIO21        |
 
 ## Excluded GPIOs
 
@@ -156,9 +162,9 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - GPIO45: strapping pin and `KEY@USER` path on the WeAct board.
 - GPIO46: strapping pin.
 - GPIO48: connected to the onboard WS2812 LED path.
-- GPIO38/GPIO47: kept reserved in the stable map for now; both are exposed on
-  the board, but they live in the high-numbered alternate-function group and
-  need separate hardware validation before export.
+- GPIO38/GPIO47: reserved for I2C port 0 SDA/SCL.
+- GPIO10/GPIO11/GPIO12/GPIO13: reserved for SPI port 0
+  SCLK/MOSI/MISO/CS0.
 
 ## ESP32-C3 Closed-Loop Probe
 
@@ -228,8 +234,14 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   - `gpioset -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -t 100ms,0 17=1`
   - `gpiomon -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -e both --debounce-period 10ms --idle-timeout 1s 17`
 - The kernel also autoloads I2C, SPI, and ADC DLN-2 subdrivers. The firmware
-  currently returns `DLN2_RES_NOT_IMPLEMENTED` for those valid but unsupported
-  handles.
+  currently returns `DLN2_RES_NOT_IMPLEMENTED` for ADC commands.
+- After reserving GPIO10-GPIO13 for SPI, the current GPIO map exposes 14 lines.
+  Verified:
+  - `gpiodetect` reports `gpiochip2 [dln2] (14 lines)`.
+  - `gpioinfo -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 0 1 2 3 4 5 6 7 8 9 10 11 12 13`
+  - `gpioget -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 --numeric 0 1 2 3 4 5 6 7 8 9 10 11 12 13`
+  - `gpiomon -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -e both --debounce-period 10ms --idle-timeout 1s 13`
+  - `/sys/class/spi_master/spi0` resolves to a `dln2-spi` child device.
 
 ## Pitfalls
 
@@ -261,7 +273,7 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   operation. On Ctrl-C or SIGTERM it attempts to set all selected lines low
   before releasing the request.
 - Linux GPIO line offsets are DLN-2 line numbers, not ESP32-S3 GPIO numbers.
-  In the current firmware, line 0 maps to ESP32 GPIO1 and line 17 maps to
+  In the current firmware, line 0 maps to ESP32 GPIO1 and line 13 maps to
   ESP32 GPIO21.
 - On the WeAct ESP32S3-A schematic, GPIO0 is tied to `KEY@BOOT` and the
   auto-download circuit path. GPIO0 and GPIO3 are also ESP32-S3 strapping pins,

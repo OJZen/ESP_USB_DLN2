@@ -32,7 +32,9 @@
 #define DLN2_RES_I2C_MASTER_SENDING_ADDRESS_FAILED 0xba
 #define DLN2_RES_I2C_MASTER_SENDING_DATA_FAILED 0xbb
 #define DLN2_RES_INVALID_CHANNEL_NUMBER 0xc0
+#define DLN2_RES_INVALID_MODE          0xc7
 #define DLN2_RES_INVALID_VALUE         0xe2
+#define DLN2_RES_SPI_MASTER_INVALID_SS_VALUE 0xb9
 
 typedef enum {
     DLN2_HANDLE_EVENT = 0,
@@ -106,6 +108,10 @@ const char *dln2_module_name(uint8_t module);
 
 void dln2_i2c_init(void);
 size_t dln2_i2c_handle_request(const dln2_request_t *request,
+                               uint8_t *response, size_t response_cap);
+
+void dln2_spi_init(void);
+size_t dln2_spi_handle_request(const dln2_request_t *request,
                                uint8_t *response, size_t response_cap);
 
 void dln2_gpio_init(void);

@@ -30,6 +30,8 @@ USB GPIO device.
       enable/disable through it.
 - [x] M15: Implement the Linux `i2c-dln2` minimal enable/read/write/disable
       path and verify adapter enumeration.
+- [x] M16: Implement the Linux `spi-dln2` minimal controller probe path and
+      register a SPI master on Linux.
 
 ## Log
 
@@ -124,6 +126,28 @@ USB GPIO device.
 - `i2cdetect -r -y 4` completes a full read-byte scan of `/dev/i2c-4`; no
   devices are present on the currently empty bus, so all probed addresses
   report `--`.
+- Implemented the minimal Linux `spi-dln2` command set for controller probe and
+  basic runtime transfer calls.
+- Assigned SPI port 0 to ESP32-S3 GPIO10 as SCLK, GPIO11 as MOSI, GPIO12 as
+  MISO, and GPIO13 as CS0.
+- Removed GPIO10-GPIO13 from the exported GPIO line map so `gpio-dln2` does not
+  claim those physical pins before `spi-dln2` probes. The exported GPIO chip
+  now has 14 lines.
+- Rebuilt and flashed the S3 firmware to `/dev/ttyACM1`.
+- Verified after the SPI change:
+  - `lsusb -d a257:2013` reports `Diolan DLN-2 USB GPIO`.
+  - `gpiodetect` reports `gpiochip2 [dln2] (14 lines)`.
+  - `i2cdetect -l` still reports `/dev/i2c-4` as `dln2-i2c-3-2.1.2:1.0-0`.
+  - `/sys/class/spi_master/spi0` exists and resolves to the DLN-2 SPI child
+    device path `.../dln2-spi.3.auto/spi_master/spi0`.
+  - `spi_dln2` is loaded and bound through the parent `dln2` MFD driver.
+  - `gpioinfo` and `gpioget` work on current GPIO lines 0-13.
+  - `gpiomon` can request events on current GPIO line 13.
+  - The C3 closed-loop test still passes for wired lines 0-6.
+- SPI transfer validation is still pending because the kernel registers only a
+  SPI master by default; no `/dev/spidev*` device is created without a described
+  SPI slave device. The next validation target is a C3 SPI slave fixture or a
+  known external SPI device.
 
 ### 2026-06-04
 
