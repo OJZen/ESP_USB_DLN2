@@ -466,6 +466,11 @@ USB GPIO device.
   with plain `find`; GNU find does not descend into command-line symlink
   directories unless requested. Changed the scan to `find -H` so buffer and
   scan element attributes are included.
+- Reinstalled host support after the `find -H` fix. `esp-usb-dln2-check`
+  passed all readiness checks for the connected S3: USB present, GPIO
+  readable/writable, I2C readable/writable, DLN-2 SPI master present,
+  `/dev/spidev0.0` readable/writable, IIO character device readable/writable,
+  and IIO buffer sysfs writable by `jzen`.
 
 ### 2026-06-04
 
