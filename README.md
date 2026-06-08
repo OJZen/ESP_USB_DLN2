@@ -10,6 +10,36 @@ of a custom host driver.
 Current target board: WeAct ESP32S3-A. Current Linux compatibility target:
 mainline `dln2`, `gpio-dln2`, `i2c-dln2`, `spi-dln2`, and `dln2-adc`.
 
+## Quick Start
+
+The paths and TTY names below are examples. Replace `IDF_PATH` and the S3 flash
+port with the values on your host.
+
+```bash
+git clone https://github.com/Gdszzy/ESP_USB_DLN2.git
+cd ESP_USB_DLN2
+
+export IDF_PATH=/path/to/esp-idf
+. "$IDF_PATH/export.sh"
+idf.py set-target esp32s3
+idf.py build
+idf.py -p /dev/ttyACM1 flash
+```
+
+After flashing, connect or replug the S3 native USB port, then install the
+Linux host support:
+
+```bash
+getent group plugdev || sudo groupadd -r plugdev
+sudo ./scripts/install_host_support.sh
+sudo usermod -aG plugdev "$USER"
+newgrp plugdev
+esp-usb-dln2-check
+```
+
+When `esp-usb-dln2-check` reports all `OK`, basic GPIO/I2C/SPI/ADC access from
+Linux is ready. No additional board is required for normal use.
+
 ## Current Status
 
 Validated on the current development host:
@@ -30,6 +60,26 @@ Validated on the current development host:
 The project is still a lab/bring-up firmware, not a finished product. See
 `Known Issues` and `Notes and Safety` below before wiring external hardware.
 
+## Requirements
+
+Hardware:
+
+- WeAct ESP32S3-A or a compatible ESP32-S3 board with native USB wired to the
+  host.
+- One USB connection for flashing/logging and one native USB connection for the
+  DLN-2 emulated device.
+
+Software:
+
+- ESP-IDF v5.5.4 is the tested SDK version. Other ESP-IDF v5.x releases may
+  work, but are not the current validation target.
+- Linux with mainline DLN-2 drivers available: `dln2`, `gpio-dln2`,
+  `i2c-dln2`, `spi-dln2`, and `dln2-adc`.
+- Host build and device tools: `git`, Python 3, `make`, a C compiler, kernel
+  headers for the running kernel, `kmod`, `systemd`, and `udev`.
+- Recommended user tools: `libgpiod` command-line tools, `i2c-tools`, and
+  `dkms`.
+
 ## Implemented Device Shape
 
 - USB 2.0 full-speed vendor interface.
@@ -46,6 +96,8 @@ The project is still a lab/bring-up firmware, not a finished product. See
 ## Pin Map
 
 Linux sees DLN-2 GPIO line offsets, not ESP32-S3 GPIO numbers.
+The GPIO pins below are ordered by Linux line offset: offset 0 is GPIO1,
+offset 1 is GPIO2, and so on.
 
 | Function | Linux name | ESP32-S3 pins |
 | --- | --- | --- |
@@ -64,14 +116,15 @@ UART0 flash/log pins, PSRAM pins, JTAG pins, and the onboard LED path. See
 ESP-IDF v5.5.4 is the tested environment:
 
 ```bash
-. /home/jzen/.espressif/v5.5.4/esp-idf/export.sh
+. "$IDF_PATH/export.sh"
 idf.py set-target esp32s3
 idf.py build
 idf.py -p /dev/ttyACM1 flash monitor
 ```
 
-After flashing, unplug/replug the S3 native USB connection if Linux does not
-immediately bind the DLN-2 device.
+If `IDF_PATH` is not set, source the export script from your ESP-IDF checkout,
+for example `. /path/to/esp-idf/export.sh`. After flashing, unplug/replug the
+S3 native USB connection if Linux does not immediately bind the DLN-2 device.
 
 ## One-Time Host Setup
 
@@ -81,6 +134,7 @@ default permissions are usually root-only. Install the host support package
 once:
 
 ```bash
+getent group plugdev || sudo groupadd -r plugdev
 sudo ./scripts/install_host_support.sh
 esp-usb-dln2-check
 ```
@@ -94,6 +148,16 @@ The installer provides:
   as a DKMS package and can rebuild automatically after kernel upgrades.
 - `esp-usb-dln2-check`, a readiness diagnostic.
 - `esp-usb-dln2-uninstall`, a host support removal command.
+
+If you prefer an existing access group, pass it explicitly, for example
+`sudo ./scripts/install_host_support.sh --group i2c`. If your user is not in
+the chosen group, add it and start a new login shell:
+
+```bash
+sudo usermod -aG plugdev "$USER"
+newgrp plugdev
+esp-usb-dln2-check
+```
 
 Expected ready output is all `OK`, including `IIO buffer sysfs is writable`.
 See `HOST_SUPPORT.md` for install details and troubleshooting.
@@ -145,64 +209,34 @@ cat /sys/bus/iio/devices/iio:device*/in_voltage0_raw
 ./scripts/iio_adc_smoke_test.py --channels "0 1 2 3"
 ```
 
-## Test Fixtures
+## Basic Smoke Test
 
-`c3_test` is an ESP32-C3 test firmware used as a controllable external fixture.
-It currently supports:
-
-- GPIO closed-loop validation.
-- SPI slave fixture for S3 SPI master transfers.
-- I2C slave fixture at address `0x52`.
-
-See `c3_test/README.md` for wiring and command details. GPIO-to-GPIO tests
-should use series resistors between boards. I2C requires 3.3 V pullups on SDA
-and SCL.
-
-The recommended regression fixture is the fixed no-rewire C3/S3 harness v1:
-I2C is wired on C3 GPIO0/GPIO1 to S3 GPIO38/GPIO47, SPI is wired on C3
-GPIO4-GPIO7 to S3 GPIO10-GPIO13, and GPIO smoke/IRQ validation is wired on C3
-channels 2 and 7 to S3 DLN lines 0 and 1. With that fixture, GPIO validation
-uses:
+After host support is installed, these checks do not require extra hardware:
 
 ```bash
-./scripts/c3_closed_loop_test.py --c3-port /dev/ttyACM2 --lines "0 1" --channels "2 7"
+esp-usb-dln2-check
+gpioinfo -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00
+./scripts/iio_adc_smoke_test.py --channels "0 1 2 3"
 ```
 
-The standard full regression entry point is:
+If GPIO lines are not connected to external hardware, you can also drive a line
+briefly:
 
 ```bash
-./scripts/full_regression.sh
+gpioset -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -t 100ms,0 0=1
 ```
 
-It runs host readiness diagnostics, fixed-harness GPIO/I2C/SPI smoke tests, and
-automatic ADC IIO checks. Add `--extended` to include I2C stress/error-recovery
-coverage and the SPI mode/direction matrix:
-
-```bash
-./scripts/full_regression.sh --extended
-```
-
-Logs are written to `test_logs/`. ADC known-voltage electrical testing remains
-manual because the current C3 fixture does not generate calibrated analog
-voltages.
-
-The lower-level fixed-harness GPIO/I2C/SPI entry point is:
-
-```bash
-./scripts/c3_fixed_harness_regression.sh
-```
-
-The full 8-line GPIO-only sweep is still available, but it uses a different
-legacy GPIO-only wiring and should not be mixed with the fixed I2C/SPI harness.
+I2C and SPI transfer testing requires the user to connect an actual I2C/SPI
+target device to the S3 pins listed in the pin map.
 
 ## Notes and Safety
 
 - The firmware intentionally uses VID/PID `a257:2013` to bind Linux's mainline
   DLN-2 driver. Do not ship a product with this VID/PID.
 - All GPIO/I2C/SPI/ADC signals are 3.3 V only. Do not connect 5 V signals.
-- Do not use direct GPIO loopback tests as routine validation. A wrong output
-  configuration can short two push-pull drivers together. Prefer the C3
-  fixture with series resistors.
+- Do not directly loop GPIO outputs together. A wrong output configuration can
+  short two push-pull drivers together. Use series resistors or proper external
+  protection when connecting GPIO lines to other hardware.
 - GPIO0, GPIO3, GPIO45, and GPIO46 are strapping-sensitive on ESP32-S3 boards.
   This firmware keeps them out of the exported GPIO map.
 - GPIO19/GPIO20 are native USB pins and must stay reserved for the DLN-2 USB
@@ -227,12 +261,24 @@ legacy GPIO-only wiring and should not be mixed with the fixed I2C/SPI harness.
 - ADC electrical smoke has been validated on all 4 channels with known input
   voltages. Absolute accuracy and calibration are not validated.
 - Long-duration GPIO IRQ, I2C, SPI, and ADC endurance tests are still pending.
-- The fixed C3 no-rewire harness only covers GPIO lines 0 and 1 as routine
-  closed-loop GPIO smoke coverage. Broader GPIO line coverage needs the legacy
-  GPIO-only wiring or a larger external fixture.
+- The no-extra-hardware smoke test verifies enumeration, permissions, GPIO
+  metadata, and ADC IIO paths. I2C/SPI electrical transfers and GPIO IRQs need
+  external target hardware to validate end-to-end.
 - Only one I2C port, one SPI port with one chip select, and one 4-channel ADC
   port are implemented.
 - Unsupported DLN-2 commands intentionally return explicit errors.
+
+## Feedback Data
+
+When sharing test results or reporting a failure, include:
+
+```bash
+uname -a
+lsusb -d a257:2013
+esp-usb-dln2-check
+journalctl -u esp-usb-dln2-spi.service -n 80 --no-pager
+dmesg | grep -iE 'dln2|a257|spidev|iio'
+```
 
 ## Documentation Map
 
@@ -242,4 +288,3 @@ legacy GPIO-only wiring and should not be mixed with the fixed I2C/SPI harness.
 - `TECH_NOTES.md`: protocol notes, pin decisions, verification notes, and
   pitfalls found during bring-up.
 - `PROGRESS.md`: chronological milestone log.
-- `c3_test/README.md`: ESP32-C3 fixture firmware usage.

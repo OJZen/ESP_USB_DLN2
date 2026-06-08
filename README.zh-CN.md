@@ -9,6 +9,35 @@ USB I/O 适配器。刷入固件并安装可选的主机支持包后，Linux 可
 当前目标开发板：WeAct ESP32S3-A。当前 Linux 兼容目标：主线内核中的
 `dln2`、`gpio-dln2`、`i2c-dln2`、`spi-dln2` 和 `dln2-adc`。
 
+## 快速开始
+
+下面的路径和 TTY 名称只是示例。请把 `IDF_PATH` 和 S3 烧录串口替换成你
+自己机器上的实际值。
+
+```bash
+git clone https://github.com/Gdszzy/ESP_USB_DLN2.git
+cd ESP_USB_DLN2
+
+export IDF_PATH=/path/to/esp-idf
+. "$IDF_PATH/export.sh"
+idf.py set-target esp32s3
+idf.py build
+idf.py -p /dev/ttyACM1 flash
+```
+
+刷入后，连接或重新插拔 S3 native USB，然后安装 Linux host support：
+
+```bash
+getent group plugdev || sudo groupadd -r plugdev
+sudo ./scripts/install_host_support.sh
+sudo usermod -aG plugdev "$USER"
+newgrp plugdev
+esp-usb-dln2-check
+```
+
+当 `esp-usb-dln2-check` 全部显示 `OK` 时，Linux 侧 GPIO/I2C/SPI/ADC
+基础访问已经可用。日常使用不需要额外的开发板。
+
 ## 当前状态
 
 已在当前开发主机验证：
@@ -29,6 +58,23 @@ USB I/O 适配器。刷入固件并安装可选的主机支持包后，Linux 可
 这个项目仍处于实验室 bring-up 阶段，不是完成品。接外部硬件前请先阅读
 `已知问题` 和 `注意事项`。
 
+## 前置条件
+
+硬件：
+
+- WeAct ESP32S3-A，或 native USB 已接到主机的兼容 ESP32-S3 开发板。
+- 一路 USB 用于烧录/日志，另一路 native USB 用于 DLN-2 模拟设备。
+
+软件：
+
+- ESP-IDF v5.5.4 是当前验证过的 SDK 版本。其它 ESP-IDF v5.x 版本可能可用，
+  但不是当前验证目标。
+- Linux 需要有主线 DLN-2 驱动：`dln2`、`gpio-dln2`、`i2c-dln2`、
+  `spi-dln2` 和 `dln2-adc`。
+- 主机构建和设备工具：`git`、Python 3、`make`、C 编译器、当前内核对应的
+  kernel headers、`kmod`、`systemd` 和 `udev`。
+- 推荐用户态工具：`libgpiod` 命令行工具、`i2c-tools` 和 `dkms`。
+
 ## 已实现的设备形态
 
 - USB 2.0 full-speed vendor interface。
@@ -45,6 +91,8 @@ USB I/O 适配器。刷入固件并安装可选的主机支持包后，Linux 可
 ## 引脚映射
 
 Linux 看到的是 DLN-2 GPIO line offset，不是 ESP32-S3 GPIO 编号。
+下表中的 GPIO 引脚按 Linux line offset 顺序排列：offset 0 是 GPIO1，
+offset 1 是 GPIO2，后面依此类推。
 
 | 功能 | Linux 名称 | ESP32-S3 引脚 |
 | --- | --- | --- |
@@ -63,13 +111,15 @@ Linux 看到的是 DLN-2 GPIO line offset，不是 ESP32-S3 GPIO 编号。
 已验证环境为 ESP-IDF v5.5.4：
 
 ```bash
-. /home/jzen/.espressif/v5.5.4/esp-idf/export.sh
+. "$IDF_PATH/export.sh"
 idf.py set-target esp32s3
 idf.py build
 idf.py -p /dev/ttyACM1 flash monitor
 ```
 
-刷入后，如果 Linux 没有立即绑定 DLN-2 设备，可以重新插拔 S3 native USB。
+如果没有设置 `IDF_PATH`，请 source 你自己的 ESP-IDF checkout，例如
+`. /path/to/esp-idf/export.sh`。刷入后，如果 Linux 没有立即绑定 DLN-2
+设备，可以重新插拔 S3 native USB。
 
 ## 主机一次性安装
 
@@ -78,6 +128,7 @@ Linux 会自动创建 GPIO、I2C、SPI master 和 IIO ADC 子设备。但 Linux 
 只允许 root 使用。安装一次 host support：
 
 ```bash
+getent group plugdev || sudo groupadd -r plugdev
 sudo ./scripts/install_host_support.sh
 esp-usb-dln2-check
 ```
@@ -91,6 +142,16 @@ esp-usb-dln2-check
   内核升级后可以自动重建。
 - `esp-usb-dln2-check` 就绪诊断命令。
 - `esp-usb-dln2-uninstall` host support 卸载命令。
+
+如果你想使用已有权限组，可以显式指定，例如
+`sudo ./scripts/install_host_support.sh --group i2c`。如果当前用户不在选定
+权限组里，加入该组并启动新的登录 shell：
+
+```bash
+sudo usermod -aG plugdev "$USER"
+newgrp plugdev
+esp-usb-dln2-check
+```
 
 理想输出应全部为 `OK`，包括 `IIO buffer sysfs is writable`。安装细节和
 排错见 `HOST_SUPPORT.md`。
@@ -142,59 +203,32 @@ cat /sys/bus/iio/devices/iio:device*/in_voltage0_raw
 ./scripts/iio_adc_smoke_test.py --channels "0 1 2 3"
 ```
 
-## 测试夹具
+## 基础冒烟测试
 
-`c3_test` 是 ESP32-C3 测试固件，用作可控的外部测试夹具。当前支持：
-
-- GPIO 闭环验证。
-- 用作 S3 SPI master 测试对象的 SPI slave fixture。
-- 地址为 `0x52` 的 I2C slave fixture。
-
-接线和命令说明见 `c3_test/README.md`。GPIO 对 GPIO 测试应在两块板之间
-串联电阻。I2C 的 SDA/SCL 需要 3.3 V 上拉。
-
-推荐的回归测试接线是固定 no-rewire C3/S3 harness v1：I2C 使用 C3
-GPIO0/GPIO1 连接 S3 GPIO38/GPIO47，SPI 使用 C3 GPIO4-GPIO7 连接 S3
-GPIO10-GPIO13，GPIO smoke/IRQ 验证使用 C3 channel 2 和 7 连接 S3 DLN
-line 0 和 1。使用这套固定接线时，GPIO 验证命令是：
+安装 host support 后，下面这些检查不需要额外硬件：
 
 ```bash
-./scripts/c3_closed_loop_test.py --c3-port /dev/ttyACM2 --lines "0 1" --channels "2 7"
+esp-usb-dln2-check
+gpioinfo -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00
+./scripts/iio_adc_smoke_test.py --channels "0 1 2 3"
 ```
 
-标准完整回归入口是：
+如果 GPIO line 没有连接外部硬件，也可以短暂驱动一个 line：
 
 ```bash
-./scripts/full_regression.sh
+gpioset -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -t 100ms,0 0=1
 ```
 
-它会运行 host 就绪诊断、固定治具 GPIO/I2C/SPI 冒烟测试，以及 ADC IIO 自动
-检查。加上 `--extended` 可以同时跑 I2C 压力/错误恢复和 SPI
-mode/direction 矩阵：
-
-```bash
-./scripts/full_regression.sh --extended
-```
-
-日志会写入 `test_logs/`。ADC 已知电压电气测试仍然是手工项，因为当前 C3
-fixture 不能产生经过校准的模拟电压。
-
-较底层的固定治具 GPIO/I2C/SPI 回归入口是：
-
-```bash
-./scripts/c3_fixed_harness_regression.sh
-```
-
-完整 8 路 GPIO-only sweep 仍然保留，但它使用另一套 legacy GPIO-only 接线，
-不要和固定 I2C/SPI harness 混接。
+I2C 和 SPI 的传输测试需要用户把实际 I2C/SPI 目标设备接到引脚映射表里的
+S3 引脚上。
 
 ## 注意事项
 
 - 固件故意使用 VID/PID `a257:2013` 来绑定 Linux 主线 DLN-2 驱动。不要在
   产品中使用这个 VID/PID。
 - 所有 GPIO/I2C/SPI/ADC 信号都只能是 3.3 V。不要连接 5 V 信号。
-- 不要把直接 GPIO loopback 当成常规验证方式。错误的输出配置可能让两个
-  push-pull 输出互相短接。优先使用带串联电阻的 C3 fixture。
+- 不要把 GPIO 输出直接互连。错误的输出配置可能让两个 push-pull 输出互相
+  短接。连接 GPIO 到其它硬件时请使用串联电阻或合适的外部保护。
 - GPIO0、GPIO3、GPIO45、GPIO46 是 ESP32-S3 上的 strapping-sensitive
   引脚，本固件不把它们暴露为 GPIO line。
 - GPIO19/GPIO20 是 native USB 引脚，必须保留给 DLN-2 USB 设备。
@@ -217,12 +251,23 @@ fixture 不能产生经过校准的模拟电压。
 - ADC 4 个通道都已用已知输入电压完成电气冒烟测试。绝对精度和校准尚未
   验证。
 - GPIO IRQ、I2C、SPI、ADC 的长时间耐久测试仍待补充。
-- 固定 C3 no-rewire harness 的常规 GPIO 闭环 smoke 覆盖只包含 line 0 和
-  line 1。更广的 GPIO 覆盖需要 legacy GPIO-only 接线，或者后续扩展更大的
-  外部 fixture。
+- 无额外硬件的冒烟测试会验证枚举、权限、GPIO 元数据和 ADC IIO 路径。
+  I2C/SPI 电气传输和 GPIO IRQ 需要外部目标硬件才能做端到端验证。
 - 当前只实现了一个 I2C port、一个带单个 chip select 的 SPI port，以及一个
   4 通道 ADC port。
 - 未实现的 DLN-2 命令会明确返回错误，这是当前预期行为。
+
+## 反馈信息
+
+如果要分享测试结果或反馈失败，请附上：
+
+```bash
+uname -a
+lsusb -d a257:2013
+esp-usb-dln2-check
+journalctl -u esp-usb-dln2-spi.service -n 80 --no-pager
+dmesg | grep -iE 'dln2|a257|spidev|iio'
+```
 
 ## 文档索引
 
@@ -232,4 +277,3 @@ fixture 不能产生经过校准的模拟电压。
   状态。
 - `TECH_NOTES.md`：协议细节、引脚决策、验证记录和 bring-up 过程中遇到的坑。
 - `PROGRESS.md`：按时间记录的里程碑。
-- `c3_test/README.md`：ESP32-C3 fixture 固件使用说明。

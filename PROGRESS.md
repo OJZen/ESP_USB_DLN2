@@ -160,6 +160,10 @@ USB GPIO device.
   `test_logs/`.
 - Ran `shellcheck scripts/*.sh` after installing ShellCheck; all shell scripts
   passed without warnings.
+- Refocused the English and Chinese READMEs for external users who only use the
+  ESP32-S3 adapter: added quick start, requirements, no-extra-hardware smoke
+  checks, and feedback data; removed C3 fixture/regression material from the
+  user-facing path.
 
 ### 2026-06-05
 
