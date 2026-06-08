@@ -158,6 +158,8 @@ USB GPIO device.
   host readiness, fixed C3 harness GPIO/I2C/SPI, ADC IIO smoke, optional
   `--extended` I2C stress and SPI matrix, repeat loops, and log capture under
   `test_logs/`.
+- Ran `shellcheck scripts/*.sh` after installing ShellCheck; all shell scripts
+  passed without warnings.
 
 ### 2026-06-05
 
