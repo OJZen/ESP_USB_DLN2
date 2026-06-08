@@ -27,14 +27,6 @@ remove_file() {
     fi
 }
 
-remove_dir_if_empty() {
-    local path="$1"
-
-    if [ -d "$path" ]; then
-        rmdir "$path" 2>/dev/null || true
-    fi
-}
-
 if [ "$(id -u)" -ne 0 ]; then
     printf 'uninstall_host_support.sh must run as root. Use sudo.\n' >&2
     exit 1
@@ -49,6 +41,8 @@ if lsmod | awk '{print $1}' | grep -qx "$SPI_MODULE_NAME"; then
         log "unloaded $SPI_MODULE_NAME"
     else
         log "could not unload $SPI_MODULE_NAME; a spidev user may still be active"
+        log "stop users of /dev/spidev* and rerun uninstall"
+        exit 1
     fi
 fi
 
@@ -76,8 +70,5 @@ fi
 if command -v depmod >/dev/null 2>&1; then
     depmod "$(uname -r)" || true
 fi
-
-remove_dir_if_empty /usr/local/libexec
-remove_dir_if_empty /usr/local/lib
 
 log "host support removed"

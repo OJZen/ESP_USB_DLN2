@@ -159,6 +159,12 @@ require_command make "make is required to build the SPI helper module."
 require_command systemctl "systemctl is required for automatic plug-in setup."
 require_command udevadm "udevadm is required for device permission rules."
 require_command depmod "depmod is required to refresh kernel module metadata."
+require_command lsmod "lsmod is required for SPI helper reload handling."
+require_command modprobe "modprobe is required for SPI helper setup."
+require_command rmmod "rmmod is required for SPI helper reload handling."
+if [ "$DKMS_MODE" = "no" ]; then
+    require_command insmod "insmod is required when DKMS is disabled."
+fi
 
 if [ "$DKMS_MODE" = "yes" ]; then
     install_spi_helper_dkms

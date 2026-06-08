@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/device.h>
+#include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
@@ -49,6 +50,10 @@ static int __init spi_dln2_spidev_test_init(void)
 	struct spi_controller *ctlr;
 	struct spi_device *spi;
 	struct device *dev;
+
+	if (bus_num < 0 || chip_select < 0 || max_speed_hz <= 0 ||
+	    mode < 0 || mode > 3 || !modalias[0])
+		return -EINVAL;
 
 	dev = bus_find_device(&platform_bus_type, NULL, &bus_num,
 			      match_dln2_spi_controller);

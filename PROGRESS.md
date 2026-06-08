@@ -59,6 +59,7 @@ USB GPIO device.
 - [x] M32: Add a Simplified Chinese README and language switch links.
 - [x] M33: Add DKMS-capable host support install, uninstall tooling, and
       richer readiness diagnostics.
+- [x] M34: Re-audit kernel-facing host tooling and harden sensitive paths.
 
 ## Log
 
@@ -78,6 +79,16 @@ USB GPIO device.
   checking live DLN-2 device nodes.
 - Refreshed README, Chinese README, `HOST_SUPPORT.md`, and `TECH_NOTES.md`
   with DKMS, uninstall, and direct fallback behavior.
+- Re-audited the kernel-facing host tooling:
+  - Added module parameter validation to `spi_dln2_spidev_test` so invalid
+    bus, chip-select, speed, mode, or empty modalias values return `-EINVAL`
+    before calling `spi_new_device()`.
+  - Made the installer check required kmod tools up front instead of leaving
+    failures to the systemd setup service.
+  - Removed uninstall cleanup of `/usr/local/lib` and `/usr/local/libexec`
+    parent directories; only project-owned directories are removed now.
+  - Made uninstall abort if `spi_dln2_spidev_test` cannot be unloaded, avoiding
+    a half-removed install while `/dev/spidev*` is still in use.
 
 ### 2026-06-05
 
