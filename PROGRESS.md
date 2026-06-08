@@ -89,6 +89,17 @@ USB GPIO device.
     parent directories; only project-owned directories are removed now.
   - Made uninstall abort if `spi_dln2_spidev_test` cannot be unloaded, avoiding
     a half-removed install while `/dev/spidev*` is still in use.
+- User installed host support with default DKMS mode. Verified:
+  - DKMS status reports `esp-usb-dln2-spi/0.2.0` installed for
+    `7.0.11-arch1-1`.
+  - `modinfo spi_dln2_spidev_test` resolves to
+    `/lib/modules/7.0.11-arch1-1/updates/dkms/spi_dln2_spidev_test.ko.zst`,
+    reports matching vermagic, and shows the DKMS module signature.
+  - `/etc/esp_usb_dln2/host.conf` now loads the SPI helper by module name
+    `spi_dln2_spidev_test`.
+  - `esp-usb-dln2-check` passed every host support and live device check:
+    GPIO, I2C, SPI spidev, IIO character device, and IIO buffer sysfs are all
+    readable/writable by the user through group `plugdev`.
 
 ### 2026-06-05
 
