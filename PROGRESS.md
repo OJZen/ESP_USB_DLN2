@@ -66,6 +66,8 @@ USB GPIO device.
 - [x] M37: Validate the fixed C3/S3 no-rewire harness after correcting the C3
       GPIO3 wiring.
 - [x] M38: Validate ADC electrical smoke on all four exposed S3 ADC pins.
+- [x] M39: Add a one-command regression entry point with automatic ADC IIO
+      smoke coverage and log capture.
 
 ## Log
 
@@ -148,6 +150,14 @@ USB GPIO device.
   - GPIO17 / `in_voltage3_raw`: about 930-955 at 3 V.
 - Four-channel IIO buffered ADC read passed with:
   `./scripts/iio_adc_buffer_test.py --channels "0 1 2 3" --frequency 10 --samples 8`.
+- Added `scripts/iio_adc_smoke_test.py` for automatically checkable ADC
+  validation: locate `dln2-adc`, read selected raw channels, verify values are
+  within the 10-bit range, and read buffered samples from all selected channels.
+  Known-voltage accuracy remains a manual bench-supply test.
+- Added `scripts/full_regression.sh` as the standard one-command regression:
+  host readiness, fixed C3 harness GPIO/I2C/SPI, ADC IIO smoke, optional
+  `--extended` I2C stress and SPI matrix, repeat loops, and log capture under
+  `test_logs/`.
 
 ### 2026-06-05
 

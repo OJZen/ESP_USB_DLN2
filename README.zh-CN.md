@@ -139,7 +139,7 @@ ls -l /dev/spidev*
 ```bash
 cat /sys/bus/iio/devices/iio:device*/name
 cat /sys/bus/iio/devices/iio:device*/in_voltage0_raw
-./scripts/iio_adc_buffer_test.py --channels "0 1" --frequency 10 --samples 8
+./scripts/iio_adc_smoke_test.py --channels "0 1 2 3"
 ```
 
 ## 测试夹具
@@ -162,7 +162,24 @@ line 0 和 1。使用这套固定接线时，GPIO 验证命令是：
 ./scripts/c3_closed_loop_test.py --c3-port /dev/ttyACM2 --lines "0 1" --channels "2 7"
 ```
 
-固定治具的标准回归入口是：
+标准完整回归入口是：
+
+```bash
+./scripts/full_regression.sh
+```
+
+它会运行 host 就绪诊断、固定治具 GPIO/I2C/SPI 冒烟测试，以及 ADC IIO 自动
+检查。加上 `--extended` 可以同时跑 I2C 压力/错误恢复和 SPI
+mode/direction 矩阵：
+
+```bash
+./scripts/full_regression.sh --extended
+```
+
+日志会写入 `test_logs/`。ADC 已知电压电气测试仍然是手工项，因为当前 C3
+fixture 不能产生经过校准的模拟电压。
+
+较底层的固定治具 GPIO/I2C/SPI 回归入口是：
 
 ```bash
 ./scripts/c3_fixed_harness_regression.sh

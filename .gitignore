@@ -1,5 +1,6 @@
 build/
 managed_components/
+test_logs/
 sdkconfig.old
 *.pyc
 __pycache__/

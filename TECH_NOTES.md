@@ -233,6 +233,15 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   entry point. It intentionally remains a thin wrapper around the existing
   GPIO, I2C, and SPI scripts so individual failures can still be reproduced
   with the narrower script.
+- `scripts/full_regression.sh` is the higher-level standard regression entry
+  point. It runs host readiness checks, the fixed C3 GPIO/I2C/SPI harness,
+  and `scripts/iio_adc_smoke_test.py`, then records the whole run under
+  `test_logs/`.
+- `scripts/iio_adc_smoke_test.py` only checks ADC behavior that is safe to
+  automate without extra analog hardware: IIO device discovery, raw reads
+  within the advertised 10-bit range, and buffered samples from selected
+  channels. Known-voltage monotonicity/accuracy remains a manual bench-supply
+  test.
 - For C3 USB-Serial/JTAG command input, setting
   `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y` is not sufficient by itself. The probe
   firmware explicitly installs `usb_serial_jtag_driver` and calls

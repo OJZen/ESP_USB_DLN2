@@ -142,7 +142,7 @@ Read ADC raw values:
 ```bash
 cat /sys/bus/iio/devices/iio:device*/name
 cat /sys/bus/iio/devices/iio:device*/in_voltage0_raw
-./scripts/iio_adc_buffer_test.py --channels "0 1" --frequency 10 --samples 8
+./scripts/iio_adc_smoke_test.py --channels "0 1 2 3"
 ```
 
 ## Test Fixtures
@@ -168,7 +168,25 @@ uses:
 ./scripts/c3_closed_loop_test.py --c3-port /dev/ttyACM2 --lines "0 1" --channels "2 7"
 ```
 
-The standard fixed-harness regression entry point is:
+The standard full regression entry point is:
+
+```bash
+./scripts/full_regression.sh
+```
+
+It runs host readiness diagnostics, fixed-harness GPIO/I2C/SPI smoke tests, and
+automatic ADC IIO checks. Add `--extended` to include I2C stress/error-recovery
+coverage and the SPI mode/direction matrix:
+
+```bash
+./scripts/full_regression.sh --extended
+```
+
+Logs are written to `test_logs/`. ADC known-voltage electrical testing remains
+manual because the current C3 fixture does not generate calibrated analog
+voltages.
+
+The lower-level fixed-harness GPIO/I2C/SPI entry point is:
 
 ```bash
 ./scripts/c3_fixed_harness_regression.sh
