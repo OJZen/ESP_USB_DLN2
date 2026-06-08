@@ -213,9 +213,17 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - The C3 firmware defaults all probe channels to input with pulldown enabled.
   The host script only asks C3 to drive lines during the C3-output and pulse
   portions of the test, and resets C3 channels back to input afterward.
+- C3 test roles are mutually exclusive in software: `RESET`, `I2C START`, and
+  `SPI START` stop any previously active fixture role and reconfigure the pins
+  for the requested role. This allows the fixed physical wiring to remain in
+  place while tests switch between GPIO, I2C, and SPI.
 - The C3 host script waits after opening the serial port and retries `PING`
   synchronization. This handles C3 boards whose USB-UART auto-reset circuit
   toggles reset when the serial device is opened.
+- `scripts/c3_fixed_harness_regression.sh` is the default no-rewire regression
+  entry point. It intentionally remains a thin wrapper around the existing
+  GPIO, I2C, and SPI scripts so individual failures can still be reproduced
+  with the narrower script.
 - For C3 USB-Serial/JTAG command input, setting
   `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y` is not sufficient by itself. The probe
   firmware explicitly installs `usb_serial_jtag_driver` and calls
@@ -228,20 +236,27 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - Open the C3 serial port with pyserial `exclusive=True`. Parallel probes
   against the same USB-Serial/JTAG TTY corrupt command/response streams and can
   produce misleading partial lines.
-- The first closed-loop pass should use S3 DLN lines 0-7. The same C3 probe can
-  cover the remaining current GPIO lines 8-9 later by moving the
-  resistor-protected wires and passing the selected line offsets with
-  `--lines`.
-- If C3 GPIO10 / probe channel 7 is not wired, run the test with
-  `--lines "0 1 2 3 4 5 6"` so the script only drives and samples channels
-  0-6. This seven-channel setup was verified on `/dev/ttyACM2` against S3 DLN
-  lines 0-6.
+- The fixed no-rewire C3/S3 harness v1 reserves C3 GPIO0/GPIO1 for I2C and
+  C3 GPIO4-GPIO7 for SPI. Routine GPIO closed-loop coverage therefore uses
+  the two remaining safe probe channels: C3 channel 2 / GPIO3 to S3 DLN line 0,
+  and C3 channel 7 / GPIO10 to S3 DLN line 1. Run it with
+  `--lines "0 1" --channels "2 7"`.
+- Do not parallel-wire C3 channels 0, 1, or 3-6 to S3 DLN GPIO lines when the
+  fixed I2C/SPI harness is connected. Those pins are already physically tied
+  to S3 I2C/SPI signals, and GPIO test commands on them would test the wrong
+  S3 pins.
+- The older C3 GPIO-only mapping covers S3 DLN lines 0-7 by wiring C3 channels
+  0-7 to those line offsets through resistors. Keep that as legacy broad GPIO
+  coverage, separate from the fixed no-rewire harness. The same C3 probe can
+  cover the remaining current GPIO lines 8-9 by moving resistor-protected wires
+  and passing the selected line offsets with `--lines`.
 
 ## ESP32-C3 SPI Fixture
 
-- `c3_test` version `c3-probe-v3` is the current command-driven SPI slave
-  fixture while preserving the GPIO probe protocol. Version `v2` added the
-  fixture; `v3` added optional SPI mode selection.
+- `c3_test` version `c3-probe-v4` is the current command-driven SPI/I2C
+  fixture while preserving the GPIO probe protocol. Version `v2` added the SPI
+  fixture, `v3` added optional SPI mode selection, and `v4` added the I2C
+  slave fixture.
 - SPI fixture pins:
   - C3 GPIO4: SCLK input from S3 GPIO10.
   - C3 GPIO5: MOSI input from S3 GPIO11.

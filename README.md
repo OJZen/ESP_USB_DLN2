@@ -157,6 +157,25 @@ See `c3_test/README.md` for wiring and command details. GPIO-to-GPIO tests
 should use series resistors between boards. I2C requires 3.3 V pullups on SDA
 and SCL.
 
+The recommended regression fixture is the fixed no-rewire C3/S3 harness v1:
+I2C is wired on C3 GPIO0/GPIO1 to S3 GPIO38/GPIO47, SPI is wired on C3
+GPIO4-GPIO7 to S3 GPIO10-GPIO13, and GPIO smoke/IRQ validation is wired on C3
+channels 2 and 7 to S3 DLN lines 0 and 1. With that fixture, GPIO validation
+uses:
+
+```bash
+./scripts/c3_closed_loop_test.py --c3-port /dev/ttyACM2 --lines "0 1" --channels "2 7"
+```
+
+The standard fixed-harness regression entry point is:
+
+```bash
+./scripts/c3_fixed_harness_regression.sh
+```
+
+The full 8-line GPIO-only sweep is still available, but it uses a different
+legacy GPIO-only wiring and should not be mixed with the fixed I2C/SPI harness.
+
 ## Notes and Safety
 
 - The firmware intentionally uses VID/PID `a257:2013` to bind Linux's mainline
@@ -189,6 +208,9 @@ and SCL.
 - ADC electrical accuracy and calibration are not validated. Buffered and raw
   paths are protocol/driver validations.
 - Long-duration GPIO IRQ, I2C, SPI, and ADC endurance tests are still pending.
+- The fixed C3 no-rewire harness only covers GPIO lines 0 and 1 as routine
+  closed-loop GPIO smoke coverage. Broader GPIO line coverage needs the legacy
+  GPIO-only wiring or a larger external fixture.
 - Only one I2C port, one SPI port with one chip select, and one 4-channel ADC
   port are implemented.
 - Unsupported DLN-2 commands intentionally return explicit errors.

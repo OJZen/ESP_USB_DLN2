@@ -12,6 +12,7 @@ from gpiod.line import Direction, Value
 
 DEFAULT_CHIP = "/dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00"
 DEFAULT_LINES = [0, 1, 2, 3, 4, 5, 6, 7]
+MAX_C3_CHANNELS = 8
 
 
 class C3Probe:
@@ -98,6 +99,21 @@ def values_to_mask(values: list[Value]) -> int:
     return mask
 
 
+def channels_to_mask(channels: list[int]) -> int:
+    mask = 0
+    for channel in channels:
+        mask |= 1 << channel
+    return mask
+
+
+def pattern_to_channel_mask(pattern: int, channels: list[int]) -> int:
+    mask = 0
+    for index, channel in enumerate(channels):
+        if pattern & (1 << index):
+            mask |= 1 << channel
+    return mask
+
+
 def pattern_name(pattern: int, width: int) -> str:
     return f"0x{pattern:0{(width + 3) // 4}x}"
 
@@ -110,11 +126,12 @@ def check_equal(label: str, expected: int, actual: int, mask: int) -> None:
         )
 
 
-def test_s3_output_to_c3(chip: str, lines: list[int], c3: C3Probe,
+def test_s3_output_to_c3(chip: str, lines: list[int], channels: list[int], c3: C3Probe,
                          settle_s: float) -> None:
     channel_count = len(lines)
-    channel_mask = (1 << channel_count) - 1
-    patterns = [0, channel_mask] + [1 << index for index in range(channel_count)]
+    pattern_mask = (1 << channel_count) - 1
+    c3_mask = channels_to_mask(channels)
+    patterns = [0, pattern_mask] + [1 << index for index in range(channel_count)]
 
     print("TEST s3-output -> c3-input")
     c3.reset()
@@ -136,16 +153,18 @@ def test_s3_output_to_c3(chip: str, lines: list[int], c3: C3Probe,
             })
             time.sleep(settle_s)
             observed = c3.read_mask()
-            check_equal("s3-output -> c3-input", pattern, observed, channel_mask)
+            expected = pattern_to_channel_mask(pattern, channels)
+            check_equal("s3-output -> c3-input", expected, observed, c3_mask)
 
     print("PASS s3-output -> c3-input")
 
 
-def test_c3_output_to_s3(chip: str, lines: list[int], c3: C3Probe,
+def test_c3_output_to_s3(chip: str, lines: list[int], channels: list[int], c3: C3Probe,
                          settle_s: float) -> None:
     channel_count = len(lines)
-    channel_mask = (1 << channel_count) - 1
-    patterns = [0, channel_mask] + [1 << index for index in range(channel_count)]
+    pattern_mask = (1 << channel_count) - 1
+    c3_mask = channels_to_mask(channels)
+    patterns = [0, pattern_mask] + [1 << index for index in range(channel_count)]
 
     print("TEST c3-output -> s3-input")
 
@@ -156,10 +175,10 @@ def test_c3_output_to_s3(chip: str, lines: list[int], c3: C3Probe,
         config={tuple(lines): settings},
     ) as request:
         for pattern in patterns:
-            c3.drive(channel_mask, pattern)
+            c3.drive(c3_mask, pattern_to_channel_mask(pattern, channels))
             time.sleep(settle_s)
             observed = values_to_mask(request.get_values(lines))
-            check_equal("c3-output -> s3-input", pattern, observed, channel_mask)
+            check_equal("c3-output -> s3-input", pattern, observed, pattern_mask)
 
     c3.reset()
     print("PASS c3-output -> s3-input")
@@ -221,6 +240,9 @@ def main() -> int:
     parser.add_argument("--chip", default=DEFAULT_CHIP)
     parser.add_argument("--lines", default=" ".join(str(line) for line in DEFAULT_LINES),
                         help="S3 DLN line offsets wired to C3 channels")
+    parser.add_argument("--channels",
+                        help="C3 probe channel indexes wired to --lines, in the same order; "
+                             "defaults to 0..N-1")
     parser.add_argument("--settle-ms", type=int, default=50)
     parser.add_argument("--open-delay", type=float, default=1.0,
                         help="seconds to wait after opening the C3 serial port")
@@ -234,8 +256,17 @@ def main() -> int:
     lines = parse_lines(args.lines)
     if not lines:
         raise SystemExit("no S3 lines selected")
-    if len(lines) > 8:
-        raise SystemExit("the default C3 probe firmware supports at most 8 channels")
+    channels = parse_lines(args.channels) if args.channels else list(range(len(lines)))
+    if len(lines) != len(channels):
+        raise SystemExit("--lines and --channels must contain the same number of entries")
+    if len(lines) > MAX_C3_CHANNELS:
+        raise SystemExit(f"the default C3 probe firmware supports at most {MAX_C3_CHANNELS} channels")
+    if len(set(lines)) != len(lines):
+        raise SystemExit("--lines must not contain duplicates")
+    if len(set(channels)) != len(channels):
+        raise SystemExit("--channels must not contain duplicates")
+    if any(channel < 0 or channel >= MAX_C3_CHANNELS for channel in channels):
+        raise SystemExit(f"C3 channels must be in the range 0..{MAX_C3_CHANNELS - 1}")
 
     c3 = C3Probe(args.c3_port, args.baud, timeout=0.2,
                  write_timeout=args.write_timeout,
@@ -243,13 +274,16 @@ def main() -> int:
     try:
         print(c3.sync(args.sync_attempts))
         print(c3.command("MAP"))
+        print("WIRING " + " ".join(
+            f"line{line}=ch{channel}" for line, channel in zip(lines, channels)
+        ))
         c3.reset()
 
-        test_s3_output_to_c3(args.chip, lines, c3, args.settle_ms / 1000.0)
-        test_c3_output_to_s3(args.chip, lines, c3, args.settle_ms / 1000.0)
+        test_s3_output_to_c3(args.chip, lines, channels, c3, args.settle_ms / 1000.0)
+        test_c3_output_to_s3(args.chip, lines, channels, c3, args.settle_ms / 1000.0)
 
         if not args.skip_events:
-            for channel, line in enumerate(lines):
+            for channel, line in zip(channels, lines):
                 test_c3_pulse_to_s3_event(args.chip, line, channel, c3)
 
         c3.reset()

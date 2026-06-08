@@ -60,6 +60,8 @@ USB GPIO device.
 - [x] M33: Add DKMS-capable host support install, uninstall tooling, and
       richer readiness diagnostics.
 - [x] M34: Re-audit kernel-facing host tooling and harden sensitive paths.
+- [x] M35: Define the fixed no-rewire ESP32-C3/ESP32-S3 test harness and update
+      GPIO closed-loop tooling for non-contiguous C3 channel mappings.
 
 ## Log
 
@@ -100,6 +102,21 @@ USB GPIO device.
   - `esp-usb-dln2-check` passed every host support and live device check:
     GPIO, I2C, SPI spidev, IIO character device, and IIO buffer sysfs are all
     readable/writable by the user through group `plugdev`.
+- Defined fixed no-rewire C3/S3 harness v1:
+  - I2C: C3 GPIO0/GPIO1 to S3 GPIO38/GPIO47 with 3.3 V pullups.
+  - SPI: C3 GPIO4-GPIO7 to S3 GPIO10-GPIO13 through series resistors.
+  - GPIO smoke/IRQ: C3 channels 2 and 7 to S3 DLN lines 0 and 1 through series
+    resistors.
+- Updated `scripts/c3_closed_loop_test.py` with `--channels`, allowing Linux
+  GPIO line offsets to map to non-contiguous C3 probe channels. The fixed
+  harness GPIO smoke command is now:
+  `./scripts/c3_closed_loop_test.py --c3-port /dev/ttyACM2 --lines "0 1" --channels "2 7"`.
+- Added `scripts/c3_fixed_harness_regression.sh` as the default no-rewire
+  regression entry point for GPIO smoke, I2C basic transfers, and SPI basic
+  transfers, with optional I2C stress and SPI matrix runs.
+- Updated README, Chinese README, and `c3_test/README.md` to make the fixed
+  no-rewire harness the default test wiring and to keep the old 8-line mapping
+  as legacy GPIO-only coverage.
 
 ### 2026-06-05
 

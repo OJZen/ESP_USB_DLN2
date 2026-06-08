@@ -152,6 +152,24 @@ cat /sys/bus/iio/devices/iio:device*/in_voltage0_raw
 接线和命令说明见 `c3_test/README.md`。GPIO 对 GPIO 测试应在两块板之间
 串联电阻。I2C 的 SDA/SCL 需要 3.3 V 上拉。
 
+推荐的回归测试接线是固定 no-rewire C3/S3 harness v1：I2C 使用 C3
+GPIO0/GPIO1 连接 S3 GPIO38/GPIO47，SPI 使用 C3 GPIO4-GPIO7 连接 S3
+GPIO10-GPIO13，GPIO smoke/IRQ 验证使用 C3 channel 2 和 7 连接 S3 DLN
+line 0 和 1。使用这套固定接线时，GPIO 验证命令是：
+
+```bash
+./scripts/c3_closed_loop_test.py --c3-port /dev/ttyACM2 --lines "0 1" --channels "2 7"
+```
+
+固定治具的标准回归入口是：
+
+```bash
+./scripts/c3_fixed_harness_regression.sh
+```
+
+完整 8 路 GPIO-only sweep 仍然保留，但它使用另一套 legacy GPIO-only 接线，
+不要和固定 I2C/SPI harness 混接。
+
 ## 注意事项
 
 - 固件故意使用 VID/PID `a257:2013` 来绑定 Linux 主线 DLN-2 驱动。不要在
@@ -181,6 +199,9 @@ cat /sys/bus/iio/devices/iio:device*/in_voltage0_raw
 - ADC 电气精度和校准尚未验证。当前 raw/buffered 路径验证的是协议和驱动
   链路。
 - GPIO IRQ、I2C、SPI、ADC 的长时间耐久测试仍待补充。
+- 固定 C3 no-rewire harness 的常规 GPIO 闭环 smoke 覆盖只包含 line 0 和
+  line 1。更广的 GPIO 覆盖需要 legacy GPIO-only 接线，或者后续扩展更大的
+  外部 fixture。
 - 当前只实现了一个 I2C port、一个带单个 chip select 的 SPI port，以及一个
   4 通道 ADC port。
 - 未实现的 DLN-2 命令会明确返回错误，这是当前预期行为。
