@@ -1,5 +1,7 @@
 # ESP USB DLN2
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 ESP USB DLN2 turns an ESP32-S3 board into a Linux-compatible DLN-2 style USB
 I/O adapter. After flashing the firmware and installing the optional host
 support package, Linux can use the S3 through existing mainline drivers instead

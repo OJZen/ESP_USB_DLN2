@@ -56,6 +56,7 @@ USB GPIO device.
 - [x] M30: Add host support packaging to reduce post-plug setup complexity.
 - [x] M31: Add a root README and refresh documentation to match the current
       GPIO/I2C/SPI/ADC validation state.
+- [x] M32: Add a Simplified Chinese README and language switch links.
 
 ## Log
 
@@ -482,6 +483,8 @@ USB GPIO device.
   GPIO/I2C/SPI fixture instead of only the original GPIO probe.
 - Marked the older manual SPI helper load sequence in `TECH_NOTES.md` as a
   debug path; normal users should use `scripts/install_host_support.sh`.
+- Added `README.zh-CN.md` as a Simplified Chinese companion to `README.md` and
+  added language switch links at the top of both README files.
 
 ### 2026-06-04
 
