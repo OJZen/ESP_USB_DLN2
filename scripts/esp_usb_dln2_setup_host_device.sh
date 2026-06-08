@@ -198,18 +198,27 @@ setup_spi_child() {
 
     modprobe spidev
 
-    if [ ! -r "$SPI_MODULE" ]; then
-        log "missing SPI helper module: $SPI_MODULE"
-        return 1
-    fi
-
     if [ ! -e "$dev" ]; then
-        insmod "$SPI_MODULE" \
-            bus_num="$bus" \
-            chip_select="$SPI_CS" \
-            max_speed_hz="$SPI_MAX_SPEED_HZ" \
-            mode="$SPI_MODE" \
-            modalias="$SPI_MODALIAS"
+        if [[ "$SPI_MODULE" == */* ]]; then
+            if [ ! -r "$SPI_MODULE" ]; then
+                log "missing SPI helper module: $SPI_MODULE"
+                return 1
+            fi
+
+            insmod "$SPI_MODULE" \
+                bus_num="$bus" \
+                chip_select="$SPI_CS" \
+                max_speed_hz="$SPI_MAX_SPEED_HZ" \
+                mode="$SPI_MODE" \
+                modalias="$SPI_MODALIAS"
+        else
+            modprobe "$SPI_MODULE" \
+                bus_num="$bus" \
+                chip_select="$SPI_CS" \
+                max_speed_hz="$SPI_MAX_SPEED_HZ" \
+                mode="$SPI_MODE" \
+                modalias="$SPI_MODALIAS"
+        fi
     fi
 
     wait_for_node "$dev" || {

@@ -11,10 +11,22 @@ Install the host support once:
 sudo ./scripts/install_host_support.sh
 ```
 
-By default the installer uses group `plugdev`. To use another group:
+By default the installer uses group `plugdev` and uses DKMS when `dkms` is
+available. DKMS lets the SPI helper rebuild automatically after kernel
+upgrades. If DKMS is not installed, the script falls back to a current-kernel
+module installed under `/usr/local/lib/esp_usb_dln2/`.
+
+To use another access group:
 
 ```bash
 sudo ./scripts/install_host_support.sh --group i2c
+```
+
+To require DKMS or force the direct current-kernel fallback:
+
+```bash
+sudo ./scripts/install_host_support.sh --dkms yes
+sudo ./scripts/install_host_support.sh --dkms no
 ```
 
 After installation, unplug/replug the S3 or run:
@@ -29,9 +41,11 @@ The install provides:
 - `/etc/udev/rules.d/99-zz-esp-usb-dln2.rules`
 - `/etc/systemd/system/esp-usb-dln2-spi.service`
 - `/etc/esp_usb_dln2/host.conf`
-- `/usr/local/lib/esp_usb_dln2/spi_dln2_spidev_test.ko`
+- `/usr/src/esp-usb-dln2-spi-0.2.0/` plus DKMS metadata when DKMS is used
+- `/usr/local/lib/esp_usb_dln2/spi_dln2_spidev_test.ko` when DKMS is not used
 - `/usr/local/libexec/esp_usb_dln2/esp_usb_dln2_setup_host_device.sh`
 - `/usr/local/bin/esp-usb-dln2-check`
+- `/usr/local/sbin/esp-usb-dln2-uninstall`
 
 Expected usable devices after plug-in:
 
@@ -51,4 +65,16 @@ If the DLN-2 `/dev/spidevX.0` node is missing after replug:
 ```bash
 sudo systemctl start esp-usb-dln2-spi.service
 journalctl -u esp-usb-dln2-spi.service -n 50 --no-pager
+```
+
+To remove the host support package:
+
+```bash
+sudo esp-usb-dln2-uninstall
+```
+
+or from the repository checkout:
+
+```bash
+sudo ./scripts/uninstall_host_support.sh
 ```

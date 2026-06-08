@@ -86,8 +86,10 @@ esp-usb-dln2-check
 - DLN-2 GPIO、I2C、IIO 和 spidev 节点的 udev 权限规则。
 - 处理 replug/re-enumeration 的 systemd oneshot。
 - 一个小型主机侧 kernel helper，用于在 DLN-2 SPI controller 上注册临时
-  `spidev` 子设备。
+  `spidev` 子设备。当系统安装了 `dkms` 时，这个 helper 会作为 DKMS 包安装，
+  内核升级后可以自动重建。
 - `esp-usb-dln2-check` 就绪诊断命令。
+- `esp-usb-dln2-uninstall` host support 卸载命令。
 
 理想输出应全部为 `OK`，包括 `IIO buffer sysfs is writable`。安装细节和
 排错见 `HOST_SUPPORT.md`。
@@ -170,8 +172,9 @@ cat /sys/bus/iio/devices/iio:device*/in_voltage0_raw
 
 - SPI 用户态访问仍需要 host support 包，因为 Linux 不会为裸 SPI controller
   自动创建 `spidev`。
-- 主机侧 SPI child registrar 是实验室 helper kernel module。主机升级内核
-  后需要按当前内核重新构建。
+- 主机侧 SPI child registrar 仍是实验室 helper kernel module。有 DKMS 时
+  可以覆盖常规内核升级；如果用 `--dkms no` 安装，升级内核后需要重新运行
+  安装脚本。
 - 当前 `I2C_RDWR` 验证覆盖的是 Linux `i2c-dln2` 的现有行为：它对每个
   `i2c_msg` 发送一个 DLN-2 transfer。严格要求 repeated START 的设备需要
   单独评估。

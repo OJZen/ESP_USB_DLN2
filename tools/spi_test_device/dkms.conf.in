@@ -1,0 +1,8 @@
+PACKAGE_NAME="@DKMS_PACKAGE@"
+PACKAGE_VERSION="@DKMS_VERSION@"
+
+BUILT_MODULE_NAME[0]="spi_dln2_spidev_test"
+DEST_MODULE_LOCATION[0]="/updates/dkms"
+AUTOINSTALL="yes"
+
+MAKE[0]="make KDIR=/lib/modules/${kernelver}/build"

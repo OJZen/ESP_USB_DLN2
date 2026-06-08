@@ -395,9 +395,11 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   controller. The host support package keeps that policy boundary explicit and
   provides a host-side SPI child registrar.
 - `scripts/install_host_support.sh` is the intended one-time setup entrypoint.
-  It must run as root, builds `spi_dln2_spidev_test.ko` in a temporary build
-  directory against the running kernel, copies it to
-  `/usr/local/lib/esp_usb_dln2/`, and installs udev/systemd support files.
+  It must run as root. It now prefers DKMS when `dkms` is available, installing
+  source under `/usr/src/esp-usb-dln2-spi-0.2.0/` so the SPI helper can rebuild
+  after kernel upgrades. Without DKMS, it falls back to building
+  `spi_dln2_spidev_test.ko` in a temporary directory for the running kernel and
+  copying it to `/usr/local/lib/esp_usb_dln2/`.
 - `host_support/99-zz-esp-usb-dln2.rules.in` matches VID/PID `a257:2013` and
   triggers `esp-usb-dln2-spi.service` on USB add, `dln2-spi` platform add, and
   `dln2-adc` IIO add. It also sets permissions for DLN-2 GPIO, I2C, IIO, and
@@ -415,7 +417,9 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   `sudo ./scripts/install_host_support.sh --group GROUP` or afterward through
   `/etc/esp_usb_dln2/host.conf`.
 - `scripts/check_device_ready.sh` is the user-facing diagnostic. It checks
-  USB presence, GPIO by-id link, DLN-2 I2C adapter, DLN-2 SPI master, the exact
+  host support files, systemd state, SPI helper kernel-version compatibility,
+  DKMS registration when applicable, USB presence, GPIO by-id link, DLN-2 I2C
+  adapter, DLN-2 SPI master, the exact
   `/dev/spidev<dln2-bus>.<configured-cs>` node, DLN-2 IIO ADC, and basic
   read/write permissions.
 - IIO devices under `/sys/bus/iio/devices/iio:deviceX` are symlinks on this

@@ -57,8 +57,27 @@ USB GPIO device.
 - [x] M31: Add a root README and refresh documentation to match the current
       GPIO/I2C/SPI/ADC validation state.
 - [x] M32: Add a Simplified Chinese README and language switch links.
+- [x] M33: Add DKMS-capable host support install, uninstall tooling, and
+      richer readiness diagnostics.
 
 ## Log
+
+### 2026-06-08
+
+- Added a DKMS template for `spi_dln2_spidev_test`.
+- Updated `scripts/install_host_support.sh` with `--dkms auto|yes|no`.
+  The default is `auto`: use DKMS when available, otherwise fall back to the
+  previous current-kernel direct module install.
+- Updated `/etc/esp_usb_dln2/host.conf` generation so the setup service can
+  load the SPI helper either by module name through `modprobe` or by direct
+  `.ko` path through `insmod`.
+- Added `scripts/uninstall_host_support.sh` and install-time
+  `/usr/local/sbin/esp-usb-dln2-uninstall`.
+- Extended `esp-usb-dln2-check` to report host support files, systemd state,
+  SPI helper kernel-version compatibility, and DKMS registration before
+  checking live DLN-2 device nodes.
+- Refreshed README, Chinese README, `HOST_SUPPORT.md`, and `TECH_NOTES.md`
+  with DKMS, uninstall, and direct fallback behavior.
 
 ### 2026-06-05
 

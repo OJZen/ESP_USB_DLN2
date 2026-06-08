@@ -89,8 +89,10 @@ The installer provides:
 - udev permissions for DLN-2 GPIO, I2C, IIO, and spidev nodes.
 - a systemd oneshot that handles replug/re-enumeration.
 - a small host-side kernel helper that registers a temporary `spidev` child on
-  the DLN-2 SPI controller.
+  the DLN-2 SPI controller. When `dkms` is available, this helper is installed
+  as a DKMS package and can rebuild automatically after kernel upgrades.
 - `esp-usb-dln2-check`, a readiness diagnostic.
+- `esp-usb-dln2-uninstall`, a host support removal command.
 
 Expected ready output is all `OK`, including `IIO buffer sysfs is writable`.
 See `HOST_SUPPORT.md` for install details and troubleshooting.
@@ -178,8 +180,9 @@ and SCL.
 
 - SPI userspace access still needs the host support package because Linux does
   not create `spidev` for a bare SPI controller.
-- The host-side SPI child registrar is a lab helper kernel module. It must be
-  rebuilt for the running kernel after kernel upgrades.
+- The host-side SPI child registrar is still a lab helper kernel module. DKMS
+  covers normal kernel upgrades when available; systems installed with
+  `--dkms no` need the installer rerun after a kernel upgrade.
 - I2C `I2C_RDWR` validation covers Linux's current `i2c-dln2` behavior, which
   sends one DLN-2 transfer per `i2c_msg`. Devices requiring a strict repeated
   START need separate scrutiny.
