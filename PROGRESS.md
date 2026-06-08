@@ -164,6 +164,9 @@ USB GPIO device.
   ESP32-S3 adapter: added quick start, requirements, no-extra-hardware smoke
   checks, and feedback data; removed C3 fixture/regression material from the
   user-facing path.
+- Added a short root README pointer to the developer-only C3 fixture and added
+  a dedicated Simplified Chinese `c3_test` README for wiring, flashing, and
+  fixed-harness regression notes.
 
 ### 2026-06-05
 

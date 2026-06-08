@@ -288,3 +288,5 @@ dmesg | grep -iE 'dln2|a257|spidev|iio'
 - `TECH_NOTES.md`: protocol notes, pin decisions, verification notes, and
   pitfalls found during bring-up.
 - `PROGRESS.md`: chronological milestone log.
+- `c3_test/README.md`: developer-only ESP32-C3 closed-loop fixture notes; not
+  needed for normal S3 adapter use.

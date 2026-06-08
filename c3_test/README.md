@@ -1,8 +1,13 @@
 # ESP32-C3 Test Fixture
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 This firmware turns an ESP32-C3 board into a USB-Serial/JTAG controlled test
 fixture for the ESP32-S3 DLN-2 firmware. It currently supports GPIO probing,
 SPI slave testing, and I2C slave testing.
+
+This is a developer regression fixture. Normal users of the ESP32-S3 USB DLN2
+adapter do not need this firmware or an ESP32-C3 board.
 
 ## Default Channels
 
@@ -147,7 +152,8 @@ protection; 1 kOhm to 2.2 kOhm has worked in this setup.
 ## Build
 
 ```bash
-. /home/jzen/.espressif/v5.5.4/esp-idf/export.sh
+export IDF_PATH=/path/to/esp-idf
+. "$IDF_PATH/export.sh"
 cd c3_test
 idf.py set-target esp32c3
 idf.py build
@@ -155,11 +161,12 @@ idf.py build
 
 ## Flash
 
-Use the C3 board's own serial port. The S3 board has been using
-`/dev/ttyACM1`, so do not flash the C3 firmware to that port.
+Use the C3 board's own serial port. Do not flash this firmware to the S3 flash
+port.
 
 ```bash
-. /home/jzen/.espressif/v5.5.4/esp-idf/export.sh
+export IDF_PATH=/path/to/esp-idf
+. "$IDF_PATH/export.sh"
 idf.py -C c3_test -p <C3_PORT> flash monitor
 ```
 

@@ -277,3 +277,5 @@ dmesg | grep -iE 'dln2|a257|spidev|iio'
   状态。
 - `TECH_NOTES.md`：协议细节、引脚决策、验证记录和 bring-up 过程中遇到的坑。
 - `PROGRESS.md`：按时间记录的里程碑。
+- `c3_test/README.zh-CN.md`：开发者专用 ESP32-C3 闭环测试夹具说明；日常使用
+  S3 适配器不需要。
