@@ -306,6 +306,10 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   high before the first selected transfer. The firmware now sends one dummy
   8-bit transaction with CS inactive after SPI enable/reconfiguration; normal
   selected SPI slaves ignore this clock train because CS is high.
+- If an ESP-IDF SPI transaction fails, the firmware must deassert CS even when
+  the DLN-2 transfer attribute requested `LEAVE_SS_LOW`. Holding CS low after a
+  failed transfer can leave the external slave selected while Linux has already
+  received an error.
 - Without the CPOL idle-prime step, mode 3 could fail on the first short
   full-duplex transaction after a mode change. The C3 fixture observed one
   extra byte and both MOSI/MISO streams were shifted.

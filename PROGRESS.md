@@ -62,6 +62,7 @@ USB GPIO device.
 - [x] M34: Re-audit kernel-facing host tooling and harden sensitive paths.
 - [x] M35: Define the fixed no-rewire ESP32-C3/ESP32-S3 test harness and update
       GPIO closed-loop tooling for non-contiguous C3 channel mappings.
+- [x] M36: Harden firmware SPI chip-select cleanup on transfer failures.
 
 ## Log
 
@@ -117,6 +118,8 @@ USB GPIO device.
 - Updated README, Chinese README, and `c3_test/README.md` to make the fixed
   no-rewire harness the default test wiring and to keep the old 8-line mapping
   as legacy GPIO-only coverage.
+- Hardened the S3 SPI firmware transfer path so a failed SPI transaction always
+  deasserts CS, even when Linux requested `DLN2_SPI_ATTR_LEAVE_SS_LOW`.
 
 ### 2026-06-05
 

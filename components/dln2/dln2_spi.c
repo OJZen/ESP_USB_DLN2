@@ -637,6 +637,20 @@ static uint16_t spi_transmit(const uint8_t *tx_data, uint8_t *rx_data,
     return DLN2_RES_SUCCESS;
 }
 
+static uint16_t spi_transmit_selected(const uint8_t *tx_data, uint8_t *rx_data,
+                                      uint16_t size, uint8_t attr)
+{
+    uint16_t result;
+
+    spi_cs_set_active(true);
+    result = spi_transmit(tx_data, rx_data, size);
+    if (result != DLN2_RES_SUCCESS || !(attr & DLN2_SPI_ATTR_LEAVE_SS_LOW)) {
+        spi_cs_set_active(false);
+    }
+
+    return result;
+}
+
 static size_t spi_read_write_request(const dln2_request_t *request,
                                      uint8_t *response, size_t response_cap)
 {
@@ -666,12 +680,8 @@ static size_t spi_read_write_request(const dln2_request_t *request,
     }
 
     dln2_put_le16(payload, size);
-    spi_cs_set_active(true);
-    result = spi_transmit(request->payload + 4, payload + sizeof(uint16_t),
-                          size);
-    if (!(attr & DLN2_SPI_ATTR_LEAVE_SS_LOW)) {
-        spi_cs_set_active(false);
-    }
+    result = spi_transmit_selected(request->payload + 4,
+                                   payload + sizeof(uint16_t), size, attr);
 
     if (result != DLN2_RES_SUCCESS) {
         return dln2_make_response(request, result, NULL, 0, response,
@@ -709,11 +719,8 @@ static size_t spi_read_request(const dln2_request_t *request, uint8_t *response,
 
     dln2_put_le16(payload, size);
     memset(payload + sizeof(uint16_t), 0, size);
-    spi_cs_set_active(true);
-    result = spi_transmit(NULL, payload + sizeof(uint16_t), size);
-    if (!(attr & DLN2_SPI_ATTR_LEAVE_SS_LOW)) {
-        spi_cs_set_active(false);
-    }
+    result = spi_transmit_selected(NULL, payload + sizeof(uint16_t), size,
+                                   attr);
 
     if (result != DLN2_RES_SUCCESS) {
         return dln2_make_response(request, result, NULL, 0, response,
@@ -753,11 +760,7 @@ static size_t spi_write_request(const dln2_request_t *request,
                                   response_cap);
     }
 
-    spi_cs_set_active(true);
-    result = spi_transmit(request->payload + 4, NULL, size);
-    if (!(attr & DLN2_SPI_ATTR_LEAVE_SS_LOW)) {
-        spi_cs_set_active(false);
-    }
+    result = spi_transmit_selected(request->payload + 4, NULL, size, attr);
 
     if (result != DLN2_RES_SUCCESS) {
         return dln2_make_response(request, result, NULL, 0, response,
