@@ -133,6 +133,15 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 - Floating ADC inputs can read any value, including full-scale 1023. Treat
   current sysfs reads as command-path validation unless the ADC pin is connected
   to a known voltage within ESP32-S3 limits.
+- Known-voltage ADC electrical smoke was validated with a bench supply and
+  common ground:
+  - GPIO14 / `in_voltage0_raw`: about 10-13 at 0 V, 610-623 at 2 V, and
+    930-957 at 3 V.
+  - GPIO15 / `in_voltage1_raw`: about 947-958 at 3 V.
+  - GPIO16 / `in_voltage2_raw`: about 952-987 at 3 V.
+  - GPIO17 / `in_voltage3_raw`: about 930-955 at 3 V.
+  This validates channel wiring and monotonic behavior, not absolute accuracy
+  or calibration.
 - The firmware implements ADC buffer events with an ESP timer and a FreeRTOS
   queue. Event payload is empty because Linux `dln2-adc` ignores event payload
   and immediately calls `GET_ALL_VAL` from its trigger handler.
@@ -550,10 +559,8 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   claims/releases the corresponding physical GPIO on those channel commands.
 - ADC buffered IIO mode now has firmware support for `CHANNEL_SET_CFG`,
   `CONDITION_MET_EV`, and `GET_ALL_VAL`. It was validated with:
-  `sudo ./scripts/iio_adc_buffer_test.py --channels "0 1" --frequency 10 --samples 8`.
+  `./scripts/iio_adc_buffer_test.py --channels "0 1 2 3" --frequency 10 --samples 8`.
 - The validated buffer test read 8 frames from `/dev/iio:device0`; each frame
-  contained both enabled channels. The observed values were full-scale because
-  the ADC inputs were floating, so this is protocol validation, not calibration
-  or voltage-accuracy validation.
-- Root access is still required for the current host's IIO buffer sysfs files
-  and `/dev/iio:device0` unless udev/sysfs permissions are relaxed.
+  contained all four enabled channels. Channels not connected to the bench
+  supply may float to full-scale, so use known-voltage raw reads for electrical
+  smoke and a calibrated source/reference for any future accuracy validation.

@@ -21,7 +21,8 @@ USB I/O 适配器。刷入固件并安装可选的主机支持包后，Linux 可
   恢复压力测试。
 - SPI 通过 `spi-dln2` 暴露为 Linux SPI master，并通过主机侧 helper 创建
   实验用 `spidev` 子设备以支持用户态传输。
-- ADC 通过 `dln2-adc` 暴露为 IIO 设备，已验证 raw read 和 buffered read。
+- ADC 通过 `dln2-adc` 暴露为 IIO 设备，已验证 raw read、buffered read
+  和 4 通道已知电压电气冒烟测试。
 - 一次性 host support 安装后，当前主机上的普通用户可以直接访问
   GPIO/I2C/SPI/IIO。
 
@@ -196,8 +197,8 @@ line 0 和 1。使用这套固定接线时，GPIO 验证命令是：
 - 当前 `I2C_RDWR` 验证覆盖的是 Linux `i2c-dln2` 的现有行为：它对每个
   `i2c_msg` 发送一个 DLN-2 transfer。严格要求 repeated START 的设备需要
   单独评估。
-- ADC 电气精度和校准尚未验证。当前 raw/buffered 路径验证的是协议和驱动
-  链路。
+- ADC 4 个通道都已用已知输入电压完成电气冒烟测试。绝对精度和校准尚未
+  验证。
 - GPIO IRQ、I2C、SPI、ADC 的长时间耐久测试仍待补充。
 - 固定 C3 no-rewire harness 的常规 GPIO 闭环 smoke 覆盖只包含 line 0 和
   line 1。更广的 GPIO 覆盖需要 legacy GPIO-only 接线，或者后续扩展更大的

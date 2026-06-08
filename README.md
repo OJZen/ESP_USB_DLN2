@@ -22,7 +22,8 @@ Validated on the current development host:
   recovery stress.
 - SPI master through `spi-dln2`, with a host-side helper that creates a lab
   `spidev` child for userspace transfers.
-- ADC IIO device through `dln2-adc`, including raw reads and buffered reads.
+- ADC IIO device through `dln2-adc`, including raw reads, buffered reads, and
+  a 4-channel known-voltage electrical smoke test.
 - One-time host support install that makes GPIO/I2C/SPI/IIO usable by the
   normal user on the current host.
 
@@ -205,8 +206,8 @@ legacy GPIO-only wiring and should not be mixed with the fixed I2C/SPI harness.
 - I2C `I2C_RDWR` validation covers Linux's current `i2c-dln2` behavior, which
   sends one DLN-2 transfer per `i2c_msg`. Devices requiring a strict repeated
   START need separate scrutiny.
-- ADC electrical accuracy and calibration are not validated. Buffered and raw
-  paths are protocol/driver validations.
+- ADC electrical smoke has been validated on all 4 channels with known input
+  voltages. Absolute accuracy and calibration are not validated.
 - Long-duration GPIO IRQ, I2C, SPI, and ADC endurance tests are still pending.
 - The fixed C3 no-rewire harness only covers GPIO lines 0 and 1 as routine
   closed-loop GPIO smoke coverage. Broader GPIO line coverage needs the legacy

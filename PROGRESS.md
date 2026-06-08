@@ -65,6 +65,7 @@ USB GPIO device.
 - [x] M36: Harden firmware SPI chip-select cleanup on transfer failures.
 - [x] M37: Validate the fixed C3/S3 no-rewire harness after correcting the C3
       GPIO3 wiring.
+- [x] M38: Validate ADC electrical smoke on all four exposed S3 ADC pins.
 
 ## Log
 
@@ -139,6 +140,14 @@ USB GPIO device.
 - SPI validation passed against the fixed harness:
   mode 0 full-duplex basic transfer plus modes 0-3 across full/read/write at
   100 kHz and 16 bytes.
+- ADC electrical smoke validation passed with a bench supply and common ground:
+  - GPIO14 / `in_voltage0_raw`: about 10-13 at 0 V, 610-623 at 2 V, and
+    930-957 at 3 V.
+  - GPIO15 / `in_voltage1_raw`: about 947-958 at 3 V.
+  - GPIO16 / `in_voltage2_raw`: about 952-987 at 3 V.
+  - GPIO17 / `in_voltage3_raw`: about 930-955 at 3 V.
+- Four-channel IIO buffered ADC read passed with:
+  `./scripts/iio_adc_buffer_test.py --channels "0 1 2 3" --frequency 10 --samples 8`.
 
 ### 2026-06-05
 
