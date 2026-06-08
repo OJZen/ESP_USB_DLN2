@@ -241,6 +241,9 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   the two remaining safe probe channels: C3 channel 2 / GPIO3 to S3 DLN line 0,
   and C3 channel 7 / GPIO10 to S3 DLN line 1. Run it with
   `--lines "0 1" --channels "2 7"`.
+- A C3 GPIO3 wiring error can mimic a failed S3 DLN line 0. After correcting
+  the wire, the fixed GPIO smoke path passed on both line 0 / channel 2 and
+  line 1 / channel 7.
 - Do not parallel-wire C3 channels 0, 1, or 3-6 to S3 DLN GPIO lines when the
   fixed I2C/SPI harness is connected. Those pins are already physically tied
   to S3 I2C/SPI signals, and GPIO test commands on them would test the wrong

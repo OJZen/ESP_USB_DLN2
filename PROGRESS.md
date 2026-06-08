@@ -63,6 +63,8 @@ USB GPIO device.
 - [x] M35: Define the fixed no-rewire ESP32-C3/ESP32-S3 test harness and update
       GPIO closed-loop tooling for non-contiguous C3 channel mappings.
 - [x] M36: Harden firmware SPI chip-select cleanup on transfer failures.
+- [x] M37: Validate the fixed C3/S3 no-rewire harness after correcting the C3
+      GPIO3 wiring.
 
 ## Log
 
@@ -120,6 +122,23 @@ USB GPIO device.
   as legacy GPIO-only coverage.
 - Hardened the S3 SPI firmware transfer path so a failed SPI transaction always
   deasserts CS, even when Linux requested `DLN2_SPI_ATTR_LEAVE_SS_LOW`.
+- Reflashed the C3 test fixture on `/dev/ttyACM2` after it stopped responding
+  to `PING`; verified `c3-probe-v4` command handling recovered.
+- Reflashed the S3 firmware on `/dev/ttyACM1` with commit `78fba9b`.
+- Rechecked host support after reflashing S3; GPIO, I2C, SPI spidev, and IIO
+  ADC nodes were all present and writable.
+- After correcting a C3 GPIO3 wiring mistake, fixed-harness GPIO smoke passed
+  on both S3 DLN line 0 / C3 channel 2 and S3 DLN line 1 / C3 channel 7:
+  S3-output to C3-input, C3-output to S3-input, and `gpiomon` IRQ events all
+  passed.
+- The fixed harness default GPIO smoke path remains:
+  `./scripts/c3_closed_loop_test.py --c3-port /dev/ttyACM2 --lines "0 1" --channels "2 7"`.
+- I2C validation passed against the fixed harness:
+  raw read/write, `I2C_RDWR` register-style reads, SMBus common paths, bad
+  address recovery, and 50 mixed stress cycles.
+- SPI validation passed against the fixed harness:
+  mode 0 full-duplex basic transfer plus modes 0-3 across full/read/write at
+  100 kHz and 16 bytes.
 
 ### 2026-06-05
 
