@@ -156,6 +156,10 @@ esp-usb-dln2-check
 理想输出应全部为 `OK`，包括 `IIO buffer sysfs is writable`。安装细节和
 排错见 `HOST_SUPPORT.md`。
 
+重启后不需要重复运行安装脚本。如果重新插拔或重启后 `/dev/spidev*` 没有出现，
+先运行 `sudo systemctl start esp-usb-dln2-spi.service`，再运行
+`esp-usb-dln2-check` 检查状态。
+
 ## 使用示例
 
 查找 GPIO chip：
@@ -278,11 +282,11 @@ SPDX 头声明继续使用 GPL-2.0。
 
 ## 文档索引
 
-- `README.md`：英文项目入口。
+- `README.md` / `README.zh-CN.md`：普通用户入口，覆盖烧录、host setup、
+  功能状态、引脚映射、使用示例、安全注意事项和已知问题。
 - `HOST_SUPPORT.md`：host 安装、udev/systemd 和 SPI spidev helper 细节。
-- `DLN2_IMPLEMENTATION_PLAN.md`：从 Linux 驱动反推的命令覆盖计划和模块
-  状态。
 - `TECH_NOTES.md`：协议细节、引脚决策、验证记录和 bring-up 过程中遇到的坑。
-- `PROGRESS.md`：按时间记录的里程碑。
+  主要面向开发者。
+- `PROGRESS.md`：按时间记录的里程碑，属于历史记录，日常使用不需要阅读。
 - `c3_test/README.zh-CN.md`：开发者专用 ESP32-C3 闭环测试夹具说明；日常使用
   S3 适配器不需要。

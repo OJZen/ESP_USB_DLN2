@@ -36,6 +36,12 @@ sudo systemctl start esp-usb-dln2-spi.service
 esp-usb-dln2-check
 ```
 
+You do not need to rerun `install_host_support.sh` after every reboot. The
+udev rule and systemd oneshot handle normal boot and replug cases. Rerun the
+installer only after updating this repository's host support files, changing
+the access group, uninstalling host support, or using a non-DKMS install after
+a kernel upgrade.
+
 The install provides:
 
 - `/etc/udev/rules.d/99-zz-esp-usb-dln2.rules`

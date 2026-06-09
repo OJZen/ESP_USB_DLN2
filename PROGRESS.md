@@ -70,6 +70,8 @@ USB GPIO device.
       smoke coverage and log capture.
 - [x] M40: Add the Apache-2.0 project license while keeping the Linux kernel
       helper explicitly GPL-2.0.
+- [x] M41: Retire the completed implementation plan document and simplify the
+      public documentation map.
 
 ## Log
 
@@ -79,6 +81,13 @@ USB GPIO device.
 - Documented the repository license split: main firmware, host scripts, and
   documentation are Apache-2.0; the Linux kernel helper under
   `tools/spi_test_device/` remains GPL-2.0.
+- Removed the completed `DLN2_IMPLEMENTATION_PLAN.md` to reduce documentation
+  drift. The still-useful Linux driver and `pico-usb-io-board` references now
+  live in `TECH_NOTES.md`, and the root README documentation map now separates
+  user-facing docs from developer/history docs.
+- Clarified in the user-facing docs that host support is a one-time install;
+  normal reboot/replug paths are handled by udev and systemd, with manual
+  service restart as the first recovery step if `spidev` is missing.
 
 ### 2026-06-08
 

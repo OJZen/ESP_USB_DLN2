@@ -5,10 +5,26 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
 
 ## Hardware and Tooling
 
-- ESP-IDF path: `/home/jzen/.espressif/v5.5.4/esp-idf/`
-- Flash/log UART requested by user: `/dev/ttyACM1`
+- Tested ESP-IDF version: v5.5.4.
+- Lab flash/log UART example: `/dev/ttyACM1`. This is host-specific and users
+  should substitute the serial port assigned to their S3 board.
 - USB device under development uses ESP32-S3 native USB D-/D+ pins
   GPIO19/GPIO20. These pins must not be exposed as GPIO lines.
+
+## References
+
+- Linux `drivers/mfd/dln2.c`:
+  https://github.com/torvalds/linux/blob/master/drivers/mfd/dln2.c
+- Linux `drivers/gpio/gpio-dln2.c`:
+  https://github.com/torvalds/linux/blob/master/drivers/gpio/gpio-dln2.c
+- Linux `drivers/i2c/busses/i2c-dln2.c`:
+  https://github.com/torvalds/linux/blob/master/drivers/i2c/busses/i2c-dln2.c
+- Linux `drivers/spi/spi-dln2.c`:
+  https://github.com/torvalds/linux/blob/master/drivers/spi/spi-dln2.c
+- Linux `drivers/iio/adc/dln2-adc.c`:
+  https://github.com/torvalds/linux/blob/master/drivers/iio/adc/dln2-adc.c
+- `notro/pico-usb-io-board` device firmware:
+  https://github.com/notro/pico-usb-io-board
 
 ## Initial Scope
 

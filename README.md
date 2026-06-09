@@ -162,6 +162,11 @@ esp-usb-dln2-check
 Expected ready output is all `OK`, including `IIO buffer sysfs is writable`.
 See `HOST_SUPPORT.md` for install details and troubleshooting.
 
+You do not need to rerun the installer after every reboot. If a replug or
+reboot leaves `/dev/spidev*` missing, run
+`sudo systemctl start esp-usb-dln2-spi.service` and then
+`esp-usb-dln2-check`.
+
 ## Usage Examples
 
 Find the GPIO chip:
@@ -290,11 +295,12 @@ and remains licensed under GPL-2.0 as declared by its SPDX header.
 
 ## Documentation Map
 
+- `README.md` / `README.zh-CN.md`: normal user entry points for flashing,
+  host setup, feature status, pin map, usage, safety, and known issues.
 - `HOST_SUPPORT.md`: host install, udev/systemd, and SPI spidev helper details.
-- `DLN2_IMPLEMENTATION_PLAN.md`: Linux-driver-derived command coverage plan and
-  module status.
 - `TECH_NOTES.md`: protocol notes, pin decisions, verification notes, and
-  pitfalls found during bring-up.
-- `PROGRESS.md`: chronological milestone log.
+  pitfalls found during bring-up. This is mostly for developers.
+- `PROGRESS.md`: chronological milestone log. This is historical and not
+  required for normal use.
 - `c3_test/README.md`: developer-only ESP32-C3 closed-loop fixture notes; not
   needed for normal S3 adapter use.
