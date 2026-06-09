@@ -269,6 +269,13 @@ journalctl -u esp-usb-dln2-spi.service -n 80 --no-pager
 dmesg | grep -iE 'dln2|a257|spidev|iio'
 ```
 
+## 许可证
+
+主固件、host 脚本和文档使用 Apache License 2.0。详见 `LICENSE`。
+
+`tools/spi_test_device/` 下的 Linux kernel helper 是 Linux 内核模块，按其
+SPDX 头声明继续使用 GPL-2.0。
+
 ## 文档索引
 
 - `README.md`：英文项目入口。

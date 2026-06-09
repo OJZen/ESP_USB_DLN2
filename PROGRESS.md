@@ -68,8 +68,17 @@ USB GPIO device.
 - [x] M38: Validate ADC electrical smoke on all four exposed S3 ADC pins.
 - [x] M39: Add a one-command regression entry point with automatic ADC IIO
       smoke coverage and log capture.
+- [x] M40: Add the Apache-2.0 project license while keeping the Linux kernel
+      helper explicitly GPL-2.0.
 
 ## Log
+
+### 2026-06-09
+
+- Added a root `LICENSE` with Apache License 2.0.
+- Documented the repository license split: main firmware, host scripts, and
+  documentation are Apache-2.0; the Linux kernel helper under
+  `tools/spi_test_device/` remains GPL-2.0.
 
 ### 2026-06-08
 

@@ -280,6 +280,14 @@ journalctl -u esp-usb-dln2-spi.service -n 80 --no-pager
 dmesg | grep -iE 'dln2|a257|spidev|iio'
 ```
 
+## License
+
+The main firmware, host scripts, and documentation are licensed under the
+Apache License 2.0. See `LICENSE`.
+
+The Linux kernel helper in `tools/spi_test_device/` is a Linux kernel module
+and remains licensed under GPL-2.0 as declared by its SPDX header.
+
 ## Documentation Map
 
 - `HOST_SUPPORT.md`: host install, udev/systemd, and SPI spidev helper details.
