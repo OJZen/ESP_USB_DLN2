@@ -254,9 +254,9 @@ esp-usb-dln2-check
 
 The OLED right side shows the four buttons from top to bottom; a pressed button
 fills and enlarges its marker. The left side shows date/time, uptime, SPI flash
-capacity/ID/status, read/write counters, button bits/events, and reserved
-sensor placeholders. Flash probing is read-only by default: it reads JEDEC ID
-and status and does not erase or write the chip.
+capacity/ID/status, button event count, and reserved temperature/humidity
+placeholders. Flash probing is read-only by default: it reads JEDEC ID and
+status and does not erase or write the chip.
 
 ## Basic Smoke Test
 
