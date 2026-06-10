@@ -72,28 +72,8 @@ USB GPIO device.
       helper explicitly GPL-2.0.
 - [x] M41: Retire the completed implementation plan document and simplify the
       public documentation map.
-- [x] M42: Add an optional SSD1306/W25Q/button userspace dashboard demo for
-      real hardware smoke testing.
 
 ## Log
-
-### 2026-06-10
-
-- Added `scripts/oled_flash_button_dashboard.py`, a Linux userspace dashboard
-  that drives an SSD1306 128x64 I2C OLED, reads W25Q-style SPI NOR JEDEC/status
-  bytes, and displays four active-low GPIO button states.
-- Documented the optional dashboard wiring in both root READMEs. The demo uses
-  the fixed public pin map: OLED on GPIO38/GPIO47, SPI flash on
-  GPIO10-GPIO13, and buttons on DLN-2 lines 0-3.
-- Re-ran `esp-usb-dln2-check` after reconnecting the S3 native USB device; all
-  host support, GPIO, I2C, SPI, and IIO checks reported `OK`.
-- Verified the new script with `python3 -m py_compile`.
-- Ran the dashboard against the connected S3 hardware. Host-side I2C OLED
-  updates and SPI flash reads completed without errors; the flash returned
-  JEDEC ID `0B4018` and status `0x00`.
-- Observed one `line1` active-low button press/release event in the dashboard
-  log. Full visual and four-button confirmation remains a manual hardware
-  check.
 
 ### 2026-06-09
 

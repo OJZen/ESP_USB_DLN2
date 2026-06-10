@@ -74,7 +74,6 @@ esp-usb-dln2-check
 - 主机构建和设备工具：`git`、Python 3、`make`、C 编译器、当前内核对应的
   kernel headers、`kmod`、`systemd` 和 `udev`。
 - 推荐用户态工具：`libgpiod` 命令行工具、`i2c-tools` 和 `dkms`。
-- 可选硬件仪表盘演示：Python `gpiod` binding 和 `Pillow`。
 
 ## 已实现的设备形态
 
@@ -207,46 +206,6 @@ cat /sys/bus/iio/devices/iio:device*/name
 cat /sys/bus/iio/devices/iio:device*/in_voltage0_raw
 ./scripts/iio_adc_smoke_test.py --channels "0 1 2 3"
 ```
-
-## 可选硬件仪表盘
-
-`scripts/oled_flash_button_dashboard.py` 是一个运行在 Linux 用户态的小演示。
-它会驱动 SSD1306 128x64 I2C OLED，读取 W25Q 类 SPI NOR Flash 的基本信息，
-并显示 4 个低电平有效按钮的状态。脚本只使用本项目暴露出来的 Linux
-GPIO/I2C/SPI 接口，不需要额外的专用主机驱动。
-
-所有外部硬件都只能接 3.3 V：
-
-| 器件 | 信号 | ESP32-S3 引脚 / Linux line |
-| --- | --- | --- |
-| SSD1306 OLED | SDA | GPIO38 |
-| SSD1306 OLED | SCL | GPIO47 |
-| W25Q Flash | SCK | GPIO10 |
-| W25Q Flash | DI / MOSI | GPIO11 |
-| W25Q Flash | DO / MISO | GPIO12 |
-| W25Q Flash | CS# | GPIO13 |
-| W25Q Flash | WP#, HOLD# | 上拉到 3.3 V |
-| 最上方按钮 | 低电平有效信号 | GPIO1 / line 0 |
-| 第 2 个按钮 | 低电平有效信号 | GPIO2 / line 1 |
-| 第 3 个按钮 | 低电平有效信号 | GPIO4 / line 2 |
-| 最下方按钮 | 低电平有效信号 | GPIO5 / line 3 |
-
-所有模块需要共地。每个按钮的信号点用约 10 kOhm 上拉到 3.3 V，按钮从信号点
-接到 GND。bring-up 阶段建议在信号点和 S3 GPIO 之间串 1 kOhm 到 2.2 kOhm
-电阻。OLED 模块如果没有自带 I2C 上拉，建议 SDA/SCL 各加约 4.7 kOhm 上拉到
-3.3 V。
-
-运行：
-
-```bash
-esp-usb-dln2-check
-./scripts/oled_flash_button_dashboard.py --print-status
-```
-
-OLED 右侧从上到下显示 4 个按钮，按下时对应圆点会填充并放大。左侧显示
-日期/时间、运行时间、SPI Flash 容量/ID/status、读写计数、按钮 bit/event
-计数，以及预留的传感器占位符。Flash 探测默认只读 JEDEC ID 和 status，
-不会擦除或写入芯片。
 
 ## 基础冒烟测试
 
