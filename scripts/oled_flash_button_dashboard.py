@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 import ctypes
-import errno
 import fcntl
 import os
 import signal
@@ -333,6 +332,8 @@ class Dashboard:
     def draw_left_panel(self, draw):
         now_wall = time.localtime()
         uptime = int(time.monotonic() - self.start)
+        pressed_bits = "".join("1" if button.pressed else "0"
+                               for button in self.buttons)
         event_sum = sum(button.events for button in self.buttons)
 
         draw.text((0, 0), time.strftime("%m-%d %a", now_wall),
@@ -351,8 +352,12 @@ class Dashboard:
         else:
             draw.text((0, 30), "SPI:--", font=self.font, fill=1)
 
-        draw.text((0, 40), f"Events:{event_sum}", font=self.font, fill=1)
-        draw.text((0, 50), "T:--.-C H:--%", font=self.font, fill=1)
+        rd = format_bytes(self.flash.read_bytes if self.flash else 0)
+        wr = format_bytes(self.flash.write_bytes if self.flash else 0)
+        draw.text((0, 40), f"R:{rd} W:{wr}", font=self.font, fill=1)
+        draw.text((0, 50), f"B:{pressed_bits} E:{event_sum}", font=self.font,
+                  fill=1)
+        draw.text((56, 50), "T:-- H:--", font=self.font, fill=1)
 
     def render(self):
         image = Image.new("1", (SSD1306_WIDTH, SSD1306_HEIGHT), 0)
@@ -366,6 +371,8 @@ class Dashboard:
             f"line{button.line}={'down' if button.pressed else 'up'}"
             for button in self.buttons
         )
+        pressed_bits = "".join("1" if button.pressed else "0"
+                               for button in self.buttons)
         event_sum = sum(button.events for button in self.buttons)
         if self.flash_error:
             flash = f"flash_error={self.flash_error}"
@@ -375,7 +382,7 @@ class Dashboard:
             flash = "flash=probing"
         else:
             flash = "flash=disabled"
-        return f"{states} events={event_sum} {flash}"
+        return f"{states} buttons={pressed_bits} events={event_sum} {flash}"
 
     def run(self):
         signal.signal(signal.SIGINT, self.stop)
@@ -457,11 +464,3 @@ if __name__ == "__main__":
     except FileNotFoundError as exc:
         print(f"missing device: {exc}", file=sys.stderr)
         sys.exit(1)
-    except OSError as exc:
-        if exc.errno == errno.EBUSY:
-            print(
-                "device busy: stop other dashboard/gpiod/spidev users and retry",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        raise

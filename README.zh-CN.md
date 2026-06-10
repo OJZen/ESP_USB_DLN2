@@ -244,8 +244,9 @@ esp-usb-dln2-check
 ```
 
 OLED 右侧从上到下显示 4 个按钮，按下时对应圆点会填充并放大。左侧显示
-日期/时间、运行时间、SPI Flash 容量/ID/status、按钮事件计数，以及预留的
-温湿度占位符。Flash 探测默认只读 JEDEC ID 和 status，不会擦除或写入芯片。
+日期/时间、运行时间、SPI Flash 容量/ID/status、读写计数、按钮 bit/event
+计数，以及预留的传感器占位符。Flash 探测默认只读 JEDEC ID 和 status，
+不会擦除或写入芯片。
 
 ## 基础冒烟测试
 

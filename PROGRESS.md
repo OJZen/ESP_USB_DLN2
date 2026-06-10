@@ -94,9 +94,6 @@ USB GPIO device.
 - Observed one `line1` active-low button press/release event in the dashboard
   log. Full visual and four-button confirmation remains a manual hardware
   check.
-- Simplified the dashboard left panel by removing the on-screen button bitfield
-  and SPI read/write byte counters, leaving space for future temperature and
-  humidity values.
 
 ### 2026-06-09
 
