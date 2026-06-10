@@ -72,8 +72,21 @@ USB GPIO device.
       helper explicitly GPL-2.0.
 - [x] M41: Retire the completed implementation plan document and simplify the
       public documentation map.
+- [x] M42: Add an `examples/` application demo area and move the optional
+      OLED/W25Q/button dashboard there.
 
 ## Log
+
+### 2026-06-10
+
+- Added `examples/oled_flash_button_dashboard/` as an optional application
+  example instead of keeping the dashboard in the core project scripts.
+- The example drives an SSD1306 128x64 I2C OLED, reads W25Q-style SPI NOR
+  JEDEC/status bytes, and displays four active-low GPIO button states through
+  the normal Linux GPIO/I2C/SPI interfaces exposed by the S3 adapter.
+- Added a detailed example README with fixed wiring, dependencies, screen field
+  explanations, implementation notes, and troubleshooting.
+- Added a short `examples/` pointer to the root English and Chinese READMEs.
 
 ### 2026-06-09
 

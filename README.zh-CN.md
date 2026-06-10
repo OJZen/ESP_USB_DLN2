@@ -226,6 +226,13 @@ gpioset -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -t 100ms,0 0=
 I2C 和 SPI 的传输测试需要用户把实际 I2C/SPI 目标设备接到引脚映射表里的
 S3 引脚上。
 
+## 应用示例
+
+可选的应用层 demo 放在 `examples/` 目录下。
+`examples/oled_flash_button_dashboard/` 示例使用 SSD1306 OLED、W25Q 类
+SPI Flash 和 4 个按钮，通过 S3 适配器暴露出的普通 Linux GPIO/I2C/SPI
+接口做一个可视化仪表盘。
+
 ## 注意事项
 
 - 固件故意使用 VID/PID `a257:2013` 来绑定 Linux 主线 DLN-2 驱动。不要在
@@ -285,6 +292,7 @@ SPDX 头声明继续使用 GPL-2.0。
 - `README.md` / `README.zh-CN.md`：普通用户入口，覆盖烧录、host setup、
   功能状态、引脚映射、使用示例、安全注意事项和已知问题。
 - `HOST_SUPPORT.md`：host 安装、udev/systemd 和 SPI spidev helper 细节。
+- `examples/`：基于普通 Linux 设备接口的可选应用示例。
 - `TECH_NOTES.md`：协议细节、引脚决策、验证记录和 bring-up 过程中遇到的坑。
   主要面向开发者。
 - `PROGRESS.md`：按时间记录的里程碑，属于历史记录，日常使用不需要阅读。

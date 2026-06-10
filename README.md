@@ -234,6 +234,13 @@ gpioset -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -t 100ms,0 0=
 I2C and SPI transfer testing requires the user to connect an actual I2C/SPI
 target device to the S3 pins listed in the pin map.
 
+## Application Examples
+
+Optional application-level demos live under `examples/`. The
+`examples/oled_flash_button_dashboard/` demo uses a SSD1306 OLED, W25Q-style
+SPI flash, and four buttons to exercise GPIO, I2C, and SPI through the normal
+Linux interfaces exposed by the S3 adapter.
+
 ## Notes and Safety
 
 - The firmware intentionally uses VID/PID `a257:2013` to bind Linux's mainline
@@ -298,6 +305,8 @@ and remains licensed under GPL-2.0 as declared by its SPDX header.
 - `README.md` / `README.zh-CN.md`: normal user entry points for flashing,
   host setup, feature status, pin map, usage, safety, and known issues.
 - `HOST_SUPPORT.md`: host install, udev/systemd, and SPI spidev helper details.
+- `examples/`: optional application examples built on top of the normal Linux
+  device interfaces.
 - `TECH_NOTES.md`: protocol notes, pin decisions, verification notes, and
   pitfalls found during bring-up. This is mostly for developers.
 - `PROGRESS.md`: chronological milestone log. This is historical and not
