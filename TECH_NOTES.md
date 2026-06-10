@@ -10,6 +10,14 @@ found while building the ESP32-S3 DLN-2 compatible USB GPIO device.
   should substitute the serial port assigned to their S3 board.
 - USB device under development uses ESP32-S3 native USB D-/D+ pins
   GPIO19/GPIO20. These pins must not be exposed as GPIO lines.
+- Optional real-hardware dashboard fixture currently uses:
+  - SSD1306 128x64 I2C OLED on SDA GPIO38 and SCL GPIO47.
+  - W25Q-style SPI NOR on SCLK GPIO10, MOSI GPIO11, MISO GPIO12, CS0 GPIO13.
+  - Four active-low buttons on DLN-2 GPIO lines 0-3, which map to S3 GPIO1,
+    GPIO2, GPIO4, and GPIO5.
+- The dashboard script intentionally probes SPI flash with read-only JEDEC ID
+  and status commands. Do not add write/erase coverage without an explicit
+  destructive-test mode and clear user confirmation.
 
 ## References
 

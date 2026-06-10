@@ -79,6 +79,7 @@ Software:
   headers for the running kernel, `kmod`, `systemd`, and `udev`.
 - Recommended user tools: `libgpiod` command-line tools, `i2c-tools`, and
   `dkms`.
+- Optional dashboard demo: Python `gpiod` bindings and `Pillow`.
 
 ## Implemented Device Shape
 
@@ -213,6 +214,49 @@ cat /sys/bus/iio/devices/iio:device*/name
 cat /sys/bus/iio/devices/iio:device*/in_voltage0_raw
 ./scripts/iio_adc_smoke_test.py --channels "0 1 2 3"
 ```
+
+## Optional Hardware Dashboard
+
+`scripts/oled_flash_button_dashboard.py` is a small userspace demo for the S3
+adapter. It drives an SSD1306 128x64 I2C OLED, probes a W25Q-style SPI NOR
+flash, and shows four active-low button states. The script uses only Linux
+GPIO/I2C/SPI interfaces exposed by this project; it does not require a custom
+host driver.
+
+Connect all external hardware at 3.3 V only:
+
+| Part | Signal | ESP32-S3 pin / Linux line |
+| --- | --- | --- |
+| SSD1306 OLED | SDA | GPIO38 |
+| SSD1306 OLED | SCL | GPIO47 |
+| W25Q flash | SCK | GPIO10 |
+| W25Q flash | DI / MOSI | GPIO11 |
+| W25Q flash | DO / MISO | GPIO12 |
+| W25Q flash | CS# | GPIO13 |
+| W25Q flash | WP#, HOLD# | pull up to 3.3 V |
+| Top button | active-low signal | GPIO1 / line 0 |
+| Button 2 | active-low signal | GPIO2 / line 1 |
+| Button 3 | active-low signal | GPIO4 / line 2 |
+| Bottom button | active-low signal | GPIO5 / line 3 |
+
+Use common ground. For each button, pull the signal node up to 3.3 V with about
+10 kOhm and connect the button from that node to GND. A 1 kOhm to 2.2 kOhm
+series resistor between the signal node and the S3 GPIO pin is recommended for
+bring-up. Add external I2C pullups around 4.7 kOhm if the OLED module does not
+already include them.
+
+Run:
+
+```bash
+esp-usb-dln2-check
+./scripts/oled_flash_button_dashboard.py --print-status
+```
+
+The OLED right side shows the four buttons from top to bottom; a pressed button
+fills and enlarges its marker. The left side shows date/time, uptime, SPI flash
+capacity/ID/status, read/write counters, button bits/events, and reserved
+sensor placeholders. Flash probing is read-only by default: it reads JEDEC ID
+and status and does not erase or write the chip.
 
 ## Basic Smoke Test
 
