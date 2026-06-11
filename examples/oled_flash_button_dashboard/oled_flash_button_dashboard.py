@@ -357,12 +357,20 @@ class Dashboard:
         self.start = time.monotonic()
         self.next_flash_poll = 0.0
         self.next_sensor_poll = 0.0
+        self.current_page = 0
+        self.frame_count = 0
         self.flash_id = None
         self.flash_status = None
         self.flash_error = None
         self.temperature_c = None
         self.humidity_pct = None
         self.pressure_hpa = None
+        self.aht20_status = None
+        self.aht20_last_at = None
+        self.aht20_error = None
+        self.bmp280_temperature_c = None
+        self.bmp280_last_at = None
+        self.bmp280_error = None
         self.sensor_error = None
         self.running = True
         self.last_status_line = None
@@ -376,10 +384,12 @@ class Dashboard:
             try:
                 self.aht20 = AHT20(self.i2c_dev, args.aht20_addr)
             except OSError as exc:
+                self.aht20_error = str(exc)
                 self.sensor_error = f"AHT20: {exc}"
             try:
                 self.bmp280 = BMP280(self.i2c_dev, args.bmp280_addr)
             except OSError as exc:
+                self.bmp280_error = str(exc)
                 suffix = f"BMP280: {exc}"
                 self.sensor_error = (
                     f"{self.sensor_error}; {suffix}"
@@ -414,7 +424,7 @@ class Dashboard:
     def update_buttons(self):
         now = time.monotonic()
         values = self.gpio_request.get_values(self.button_lines)
-        for state, value in zip(self.buttons, values):
+        for index, (state, value) in enumerate(zip(self.buttons, values)):
             high = value == Value.ACTIVE
             pressed = not high if self.args.active_low else high
             state.last_pressed = state.pressed
@@ -422,6 +432,7 @@ class Dashboard:
             if pressed and not state.last_pressed:
                 state.events += 1
                 state.pulse_until = now + 0.18
+                self.current_page = index
 
     def update_flash(self):
         if not self.flash:
@@ -452,18 +463,26 @@ class Dashboard:
         errors = []
         if self.aht20:
             try:
-                temperature, humidity, _ = self.aht20.read()
+                temperature, humidity, status = self.aht20.read()
                 self.temperature_c = temperature
                 self.humidity_pct = humidity
+                self.aht20_status = status
+                self.aht20_last_at = now
+                self.aht20_error = None
             except OSError as exc:
+                self.aht20_error = str(exc)
                 errors.append(f"AHT20: {exc}")
         if self.bmp280:
             try:
                 pressure_temp, pressure = self.bmp280.read()
+                self.bmp280_temperature_c = pressure_temp
                 if self.temperature_c is None:
                     self.temperature_c = pressure_temp
                 self.pressure_hpa = pressure
+                self.bmp280_last_at = now
+                self.bmp280_error = None
             except OSError as exc:
+                self.bmp280_error = str(exc)
                 errors.append(f"BMP280: {exc}")
         self.sensor_error = "; ".join(errors) if errors else None
 
@@ -477,7 +496,7 @@ class Dashboard:
         return f"Flash:{manufacturer:02X}{mem_type:02X}{capacity_code:02X}"
 
     def draw_buttons(self, draw):
-        labels = ["1", "2", "3", "4"]
+        labels = ["H", "1", "2", "3"]
         centers = [(116, 8), (116, 23), (116, 38), (116, 53)]
         now = time.monotonic()
         draw.line((102, 0, 102, 63), fill=1)
@@ -486,7 +505,7 @@ class Dashboard:
             pulse = now < state.pulse_until
             radius = 6 if state.pressed or pulse else 4
             box = (x - radius, y - radius, x + radius, y + radius)
-            if state.pressed:
+            if state.pressed or self.current_page == index:
                 draw.ellipse(box, outline=1, fill=1)
             else:
                 draw.ellipse(box, outline=1, fill=0)
@@ -494,14 +513,13 @@ class Dashboard:
                     draw.ellipse((x - 6, y - 6, x + 6, y + 6), outline=1)
             draw.text((104, y - 4), labels[index], font=self.font_small, fill=1)
 
-    def draw_left_panel(self, draw):
+    def draw_home_page(self, draw):
         now_wall = time.localtime()
         uptime = int(time.monotonic() - self.start)
         event_sum = sum(button.events for button in self.buttons)
 
-        draw.text((0, 0), time.strftime("%m-%d %a", now_wall),
-                  font=self.font, fill=1)
-        draw.text((58, 0), time.strftime("%H:%M:%S", now_wall),
+        draw.text((0, 0), "Home", font=self.font, fill=1)
+        draw.text((36, 0), time.strftime("%H:%M:%S", now_wall),
                   font=self.font, fill=1)
         draw.text((0, 10), f"UP:{uptime // 3600:02d}:{uptime // 60 % 60:02d}:{uptime % 60:02d}",
                   font=self.font, fill=1)
@@ -527,12 +545,79 @@ class Dashboard:
         draw.text((0, 50), f"T:{temp_text}C H:{hum_text}%",
                   font=self.font, fill=1)
 
+    def draw_aht20_page(self, draw):
+        draw.text((0, 0), f"I2C1 AHT20 0x{self.args.aht20_addr:02X}",
+                  font=self.font, fill=1)
+        temp_text = "--.--" if self.temperature_c is None else f"{self.temperature_c:.2f}"
+        hum_text = "--.--" if self.humidity_pct is None else f"{self.humidity_pct:.2f}"
+        draw.text((0, 10), f"Temp:{temp_text}C", font=self.font, fill=1)
+        draw.text((0, 20), f"Hum :{hum_text}%", font=self.font, fill=1)
+        if self.aht20_status is None:
+            draw.text((0, 30), "Status:--", font=self.font, fill=1)
+            draw.text((0, 40), "Cal:-- Busy:--", font=self.font, fill=1)
+        else:
+            calibrated = "Y" if self.aht20_status & 0x08 else "N"
+            busy = "Y" if self.aht20_status & 0x80 else "N"
+            draw.text((0, 30), f"Status:0x{self.aht20_status:02X}",
+                      font=self.font, fill=1)
+            draw.text((0, 40), f"Cal:{calibrated} Busy:{busy}",
+                      font=self.font, fill=1)
+        draw.text((0, 50), self.age_or_error(self.aht20_last_at,
+                                             self.aht20_error),
+                  font=self.font, fill=1)
+
+    def draw_oled_page(self, draw):
+        draw.text((0, 0), f"I2C2 OLED 0x{self.args.oled_addr:02X}",
+                  font=self.font, fill=1)
+        draw.text((0, 10), "SSD1306 128x64", font=self.font, fill=1)
+        draw.text((0, 20), f"Bus:{os.path.basename(self.i2c_dev)}",
+                  font=self.font, fill=1)
+        draw.text((0, 30), f"Frames:{self.frame_count}",
+                  font=self.font, fill=1)
+        draw.text((0, 40), f"Refresh:{self.args.refresh_hz:.1f}Hz",
+                  font=self.font, fill=1)
+        draw.text((0, 50), "Mode:page8 full", font=self.font, fill=1)
+
+    def draw_bmp280_page(self, draw):
+        chip_id = "--" if not self.bmp280 else f"{self.bmp280.chip_id:02X}"
+        draw.text((0, 0), f"I2C3 BMP 0x{self.args.bmp280_addr:02X}",
+                  font=self.font, fill=1)
+        draw.text((0, 10), f"Chip:0x{chip_id}", font=self.font, fill=1)
+        temp_text = "--.--" if self.bmp280_temperature_c is None else f"{self.bmp280_temperature_c:.2f}"
+        pressure_text = "--.--" if self.pressure_hpa is None else f"{self.pressure_hpa:.2f}"
+        draw.text((0, 20), f"Temp:{temp_text}C", font=self.font, fill=1)
+        draw.text((0, 30), f"Press:{pressure_text}", font=self.font, fill=1)
+        draw.text((0, 40), "Unit:hPa", font=self.font, fill=1)
+        draw.text((0, 50), self.age_or_error(self.bmp280_last_at,
+                                             self.bmp280_error),
+                  font=self.font, fill=1)
+
+    def age_or_error(self, timestamp, error):
+        if error:
+            text = f"Err:{error}"
+            return text[:16]
+        if timestamp is None:
+            return "Age:--"
+        age = max(0, int(time.monotonic() - timestamp))
+        return f"Age:{age}s"
+
+    def draw_left_panel(self, draw):
+        if self.current_page == 1:
+            self.draw_aht20_page(draw)
+        elif self.current_page == 2:
+            self.draw_oled_page(draw)
+        elif self.current_page == 3:
+            self.draw_bmp280_page(draw)
+        else:
+            self.draw_home_page(draw)
+
     def render(self):
         image = Image.new("1", (SSD1306_WIDTH, SSD1306_HEIGHT), 0)
         draw = ImageDraw.Draw(image)
         self.draw_left_panel(draw)
         self.draw_buttons(draw)
         self.oled.show(image)
+        self.frame_count += 1
 
     def status_line(self):
         states = " ".join(
@@ -561,7 +646,7 @@ class Dashboard:
             sensor = "sensor=" + ",".join(parts) if parts else "sensor=probing"
             if self.sensor_error:
                 sensor += f" error={self.sensor_error}"
-        return f"{states} events={event_sum} {flash} {sensor}"
+        return f"page={self.current_page} {states} events={event_sum} {flash} {sensor}"
 
     def run(self):
         signal.signal(signal.SIGINT, self.stop)

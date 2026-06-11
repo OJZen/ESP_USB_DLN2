@@ -94,6 +94,8 @@ USB GPIO device.
   rather than a humidity-capable BME280. Humidity is read from AHT20.
 - Verified dashboard sensor output with a short run: about `24.7 C`,
   `86-87% RH`, and `1003 hPa`.
+- Added four-page navigation to the dashboard example: button 1 shows the home
+  summary, and buttons 2-4 show AHT20, OLED, and BMP280 I2C detail pages.
 
 ### 2026-06-09
 
