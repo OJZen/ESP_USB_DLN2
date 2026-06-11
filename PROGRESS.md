@@ -87,6 +87,13 @@ USB GPIO device.
 - Added a detailed example README with fixed wiring, dependencies, screen field
   explanations, implementation notes, and troubleshooting.
 - Added a short `examples/` pointer to the root English and Chinese READMEs.
+- Extended the OLED dashboard example to read the AHT20 at `0x38` and the
+  BMP280-compatible pressure sensor at `0x77`.
+- Verified the combined I2C bus sees `0x38`, `0x3c`, and `0x77`. The `0x77`
+  device reports chip ID `0x58`, so the current module is BMP280-compatible
+  rather than a humidity-capable BME280. Humidity is read from AHT20.
+- Verified dashboard sensor output with a short run: about `24.7 C`,
+  `86-87% RH`, and `1003 hPa`.
 
 ### 2026-06-09
 

@@ -110,6 +110,46 @@ def find_dln2_spidev(cs):
     raise FileNotFoundError("no DLN2 spidev node found")
 
 
+class I2CDevice:
+    def __init__(self, i2c_dev, addr):
+        self.i2c_dev = i2c_dev
+        self.addr = addr
+
+    def _open(self):
+        fd = os.open(self.i2c_dev, os.O_RDWR)
+        try:
+            fcntl.ioctl(fd, I2C_SLAVE, self.addr)
+        except Exception:
+            os.close(fd)
+            raise
+        return fd
+
+    def write(self, data):
+        fd = self._open()
+        try:
+            os.write(fd, bytes(data))
+        finally:
+            os.close(fd)
+
+    def read(self, length):
+        fd = self._open()
+        try:
+            return os.read(fd, length)
+        finally:
+            os.close(fd)
+
+    def read_reg(self, reg, length):
+        fd = self._open()
+        try:
+            os.write(fd, bytes([reg]))
+            return os.read(fd, length)
+        finally:
+            os.close(fd)
+
+    def write_reg(self, reg, value):
+        self.write([reg, value])
+
+
 class SSD1306:
     def __init__(self, i2c_dev, addr):
         self.i2c_dev = i2c_dev
@@ -175,6 +215,84 @@ class SSD1306:
             self.write(bytes(chunk))
 
 
+class AHT20:
+    def __init__(self, i2c_dev, addr=0x38):
+        self.dev = I2CDevice(i2c_dev, addr)
+
+    def read(self):
+        self.dev.write([0xAC, 0x33, 0x00])
+        time.sleep(0.09)
+        data = self.dev.read(7)
+        if len(data) != 7:
+            raise OSError("AHT20 short read")
+
+        status = data[0]
+        if status & 0x80:
+            time.sleep(0.03)
+            data = self.dev.read(7)
+            status = data[0]
+            if status & 0x80:
+                raise OSError("AHT20 busy")
+
+        raw_h = (data[1] << 12) | (data[2] << 4) | (data[3] >> 4)
+        raw_t = ((data[3] & 0x0F) << 16) | (data[4] << 8) | data[5]
+        humidity = raw_h * 100.0 / (1 << 20)
+        temperature = raw_t * 200.0 / (1 << 20) - 50.0
+        return temperature, humidity, status
+
+
+class BMP280:
+    def __init__(self, i2c_dev, addr=0x77):
+        self.dev = I2CDevice(i2c_dev, addr)
+        self.chip_id = self.dev.read_reg(0xD0, 1)[0]
+        if self.chip_id not in (0x58, 0x60):
+            raise OSError(f"unexpected BMP/BME280 chip id 0x{self.chip_id:02x}")
+        self._read_calibration()
+
+    def _read_calibration(self):
+        data = self.dev.read_reg(0x88, 24)
+        values = struct.unpack("<HhhHhhhhhhhh", data)
+        (self.dig_T1, self.dig_T2, self.dig_T3,
+         self.dig_P1, self.dig_P2, self.dig_P3, self.dig_P4,
+         self.dig_P5, self.dig_P6, self.dig_P7, self.dig_P8,
+         self.dig_P9) = values
+
+    def read(self):
+        self.dev.write_reg(0xF4, 0x25)  # temp x1, pressure x1, forced mode
+        time.sleep(0.02)
+        data = self.dev.read_reg(0xF7, 6)
+        if len(data) != 6:
+            raise OSError("BMP280 short read")
+
+        adc_p = (data[0] << 12) | (data[1] << 4) | (data[2] >> 4)
+        adc_t = (data[3] << 12) | (data[4] << 4) | (data[5] >> 4)
+
+        var1 = (((adc_t >> 3) - (self.dig_T1 << 1)) * self.dig_T2) >> 11
+        var2 = (((((adc_t >> 4) - self.dig_T1) *
+                  ((adc_t >> 4) - self.dig_T1)) >> 12) *
+                self.dig_T3) >> 14
+        t_fine = var1 + var2
+        temperature = ((t_fine * 5 + 128) >> 8) / 100.0
+
+        var1 = t_fine - 128000
+        var2 = var1 * var1 * self.dig_P6
+        var2 += (var1 * self.dig_P5) << 17
+        var2 += self.dig_P4 << 35
+        var1 = ((var1 * var1 * self.dig_P3) >> 8) + (
+            (var1 * self.dig_P2) << 12
+        )
+        var1 = (((1 << 47) + var1) * self.dig_P1) >> 33
+        if var1 == 0:
+            raise OSError("BMP280 invalid pressure calibration")
+
+        pressure = 1048576 - adc_p
+        pressure = (((pressure << 31) - var2) * 3125) // var1
+        var1 = (self.dig_P9 * (pressure >> 13) * (pressure >> 13)) >> 25
+        var2 = (self.dig_P8 * pressure) >> 19
+        pressure = ((pressure + var1 + var2) >> 8) + (self.dig_P7 << 4)
+        return temperature, pressure / 25600.0
+
+
 class SpiFlash:
     def __init__(self, spidev, speed_hz, mode):
         self.spidev = spidev
@@ -238,15 +356,35 @@ class Dashboard:
         self.font_small = ImageFont.load_default()
         self.start = time.monotonic()
         self.next_flash_poll = 0.0
+        self.next_sensor_poll = 0.0
         self.flash_id = None
         self.flash_status = None
         self.flash_error = None
+        self.temperature_c = None
+        self.humidity_pct = None
+        self.pressure_hpa = None
+        self.sensor_error = None
         self.running = True
         self.last_status_line = None
         self.next_status_print = 0.0
 
         self.i2c_dev = args.i2c_dev or find_dln2_i2c_dev()
         self.oled = SSD1306(self.i2c_dev, args.oled_addr)
+        self.aht20 = None
+        self.bmp280 = None
+        if not args.no_sensors:
+            try:
+                self.aht20 = AHT20(self.i2c_dev, args.aht20_addr)
+            except OSError as exc:
+                self.sensor_error = f"AHT20: {exc}"
+            try:
+                self.bmp280 = BMP280(self.i2c_dev, args.bmp280_addr)
+            except OSError as exc:
+                suffix = f"BMP280: {exc}"
+                self.sensor_error = (
+                    f"{self.sensor_error}; {suffix}"
+                    if self.sensor_error else suffix
+                )
 
         self.gpio_chip = args.gpio_chip
         self.button_lines = parse_int_list(args.button_lines)
@@ -303,6 +441,32 @@ class Dashboard:
         except Exception as exc:
             self.flash_error = str(exc)
 
+    def update_sensors(self):
+        if not self.aht20 and not self.bmp280:
+            return
+        now = time.monotonic()
+        if now < self.next_sensor_poll:
+            return
+        self.next_sensor_poll = now + self.args.sensor_poll_s
+
+        errors = []
+        if self.aht20:
+            try:
+                temperature, humidity, _ = self.aht20.read()
+                self.temperature_c = temperature
+                self.humidity_pct = humidity
+            except OSError as exc:
+                errors.append(f"AHT20: {exc}")
+        if self.bmp280:
+            try:
+                pressure_temp, pressure = self.bmp280.read()
+                if self.temperature_c is None:
+                    self.temperature_c = pressure_temp
+                self.pressure_hpa = pressure
+            except OSError as exc:
+                errors.append(f"BMP280: {exc}")
+        self.sensor_error = "; ".join(errors) if errors else None
+
     def flash_capacity_text(self):
         if not self.flash_id or len(self.flash_id) != 3:
             return "Flash: --"
@@ -351,8 +515,17 @@ class Dashboard:
         else:
             draw.text((0, 30), "SPI:--", font=self.font, fill=1)
 
-        draw.text((0, 40), f"Events:{event_sum}", font=self.font, fill=1)
-        draw.text((0, 50), "T:--.-C H:--%", font=self.font, fill=1)
+        if self.pressure_hpa is None:
+            pressure_text = "P:--"
+        else:
+            pressure_text = f"P:{self.pressure_hpa:.0f}"
+        draw.text((0, 40), f"E:{event_sum} {pressure_text}",
+                  font=self.font, fill=1)
+
+        temp_text = "--.-" if self.temperature_c is None else f"{self.temperature_c:.1f}"
+        hum_text = "--" if self.humidity_pct is None else f"{self.humidity_pct:.0f}"
+        draw.text((0, 50), f"T:{temp_text}C H:{hum_text}%",
+                  font=self.font, fill=1)
 
     def render(self):
         image = Image.new("1", (SSD1306_WIDTH, SSD1306_HEIGHT), 0)
@@ -375,7 +548,20 @@ class Dashboard:
             flash = "flash=probing"
         else:
             flash = "flash=disabled"
-        return f"{states} events={event_sum} {flash}"
+
+        sensor = "sensor=disabled"
+        if self.aht20 or self.bmp280:
+            parts = []
+            if self.temperature_c is not None:
+                parts.append(f"temp={self.temperature_c:.2f}C")
+            if self.humidity_pct is not None:
+                parts.append(f"hum={self.humidity_pct:.2f}%")
+            if self.pressure_hpa is not None:
+                parts.append(f"pressure={self.pressure_hpa:.2f}hPa")
+            sensor = "sensor=" + ",".join(parts) if parts else "sensor=probing"
+            if self.sensor_error:
+                sensor += f" error={self.sensor_error}"
+        return f"{states} events={event_sum} {flash} {sensor}"
 
     def run(self):
         signal.signal(signal.SIGINT, self.stop)
@@ -387,6 +573,7 @@ class Dashboard:
                 start = time.monotonic()
                 self.update_buttons()
                 self.update_flash()
+                self.update_sensors()
                 self.render()
                 if self.args.print_status:
                     now = time.monotonic()
@@ -427,6 +614,14 @@ def main():
                         help="skip W25Q flash probing")
     parser.add_argument("--flash-poll-s", type=float, default=2.0,
                         help="seconds between flash JEDEC/status reads")
+    parser.add_argument("--no-sensors", action="store_true",
+                        help="skip AHT20/BMP280 sensor probing")
+    parser.add_argument("--aht20-addr", type=lambda x: int(x, 0), default=0x38,
+                        help="AHT20 I2C address, default 0x38")
+    parser.add_argument("--bmp280-addr", type=lambda x: int(x, 0), default=0x77,
+                        help="BMP280/BME280 I2C address, default 0x77")
+    parser.add_argument("--sensor-poll-s", type=float, default=2.0,
+                        help="seconds between sensor reads")
     parser.add_argument("--refresh-hz", type=float, default=8.0)
     parser.add_argument("--duration", type=float,
                         help="seconds to run; default is forever")
@@ -440,6 +635,8 @@ def main():
         raise SystemExit("--refresh-hz must be positive")
     if args.flash_poll_s <= 0:
         raise SystemExit("--flash-poll-s must be positive")
+    if args.sensor_poll_s <= 0:
+        raise SystemExit("--sensor-poll-s must be positive")
     if args.print_interval_s <= 0:
         raise SystemExit("--print-interval-s must be positive")
     if args.spi_mode not in (0, 1, 2, 3):

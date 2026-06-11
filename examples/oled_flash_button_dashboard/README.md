@@ -2,7 +2,7 @@
 
 这个示例演示如何把 ESP USB DLN2 当作普通 Linux GPIO/I2C/SPI 适配器使用：
 Linux 侧脚本通过 DLN-2 暴露出来的接口驱动 SSD1306 OLED、读取 W25Q 类 SPI
-NOR Flash，并显示 4 个按钮的状态。
+NOR Flash，显示 4 个按钮的状态，并读取 AHT20/BMP280 类环境传感器。
 
 它是应用层示例，不是固件必需组件。普通功能验证仍以根目录 README 和
 `esp-usb-dln2-check` 为准。
@@ -12,6 +12,9 @@ NOR Flash，并显示 4 个按钮的状态。
 - ESP32-S3 已刷入本项目固件，native USB 已连接到 Linux 主机。
 - SSD1306 128x64 I2C OLED，常见地址为 `0x3c`。
 - W25Q128 或兼容 W25Q 类 SPI NOR Flash。
+- AHT20 温湿度传感器，以及可选的 BMP280/BME280 气压传感器。常见
+  “BME280 + AHT20” 模组上，`0x38` 通常是 AHT20，`0x77` 可能实际是
+  BMP280。
 - 4 个按钮。
 - 3.3 V 电源、共地、若干 1 kOhm 到 2.2 kOhm 串联电阻。
 - 如果 OLED 模块没有自带 I2C 上拉，SDA/SCL 需要约 4.7 kOhm 上拉到 3.3 V。
@@ -28,6 +31,23 @@ OLED：
 | GND | GND |
 | SDA | GPIO38 |
 | SCL | GPIO47 |
+
+传感器和 OLED 并联在同一条 I2C 总线上：
+
+| 传感器信号 | ESP32-S3 |
+| --- | --- |
+| VCC / VIN | 3.3 V |
+| GND | GND |
+| SDA | GPIO38 |
+| SCL | GPIO47 |
+
+常见地址：
+
+| 器件 | I2C 地址 |
+| --- | --- |
+| AHT20 | `0x38` |
+| SSD1306 OLED | `0x3c` |
+| BMP280/BME280 | `0x76` 或 `0x77` |
 
 SPI Flash：
 
@@ -98,6 +118,12 @@ PY
 ./examples/oled_flash_button_dashboard/oled_flash_button_dashboard.py --no-flash
 ```
 
+如果没有接传感器，可以临时跳过传感器读取：
+
+```bash
+./examples/oled_flash_button_dashboard/oled_flash_button_dashboard.py --no-sensors
+```
+
 退出时按 `Ctrl-C`。脚本会清屏并释放 GPIO line。
 
 ## 屏幕内容
@@ -108,8 +134,9 @@ PY
 - `UP`：脚本已经运行的时间。
 - `Flash`：根据 JEDEC ID 推算出的 Flash 容量。
 - `ID` / `S`：Flash JEDEC ID 和 status register。
-- `Events`：累计按钮按下事件数。
-- `T` / `H`：预留给未来温湿度传感器的数据位置。
+- `E`：累计按钮按下事件数。
+- `P`：BMP280/BME280 气压，单位 hPa。
+- `T` / `H`：AHT20 温度和湿度。
 
 右侧从上到下是 4 个按钮的圆点：
 
@@ -117,6 +144,7 @@ PY
 - 实心或放大的圆表示当前按下，或刚刚捕捉到一次按下事件。
 
 控制台日志会打印每条 GPIO line 的 `up/down` 状态、累计事件数和 Flash 状态。
+如果传感器在线，也会打印温度、湿度和气压。
 
 ## 实现方式
 
@@ -149,6 +177,18 @@ Flash ID 一直是异常值，例如 `FFFFFF` 或 `000000`
 
 优先检查 SPI 接线、Flash 供电、GND 共地、WP#/HOLD# 是否上拉，以及 CS# 是否
 接到 GPIO13。
+
+温湿度或气压一直显示 `--`
+
+先用下面的命令扫描 DLN-2 I2C 总线：
+
+```bash
+i2cdetect -r -y <DLN2_BUS>
+```
+
+正常情况下应该能看到 OLED 的 `0x3c`，AHT20 的 `0x38`，以及 BMP280/BME280
+的 `0x76` 或 `0x77`。如果只看到 `0x3c`，优先检查传感器 VCC/GND/SDA/SCL
+是否已经和 OLED 并联到同一条 I2C 总线上。
 
 按钮没有变化
 
