@@ -1,178 +1,144 @@
 # ESP USB DLN2
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+English | [简体中文](README.zh-CN.md)
 
-ESP USB DLN2 turns an ESP32-S3 board into a Linux-compatible DLN-2 style USB
-I/O adapter. After flashing the firmware and installing the optional host
-support package, Linux can use the S3 through existing mainline drivers instead
-of a custom host driver.
+ESP USB DLN2 turns an ESP32-S3 board into a USB GPIO/I2C/SPI/ADC adapter.
+The same firmware supports Linux through mainline DLN-2 drivers and Windows
+10/11 through system WinUSB and a Python client. The target board is
+**WeAct ESP32S3-A**.
 
-Current target board: WeAct ESP32S3-A. Current Linux compatibility target:
-mainline `dln2`, `gpio-dln2`, `i2c-dln2`, `spi-dln2`, and `dln2-adc`.
+| Host | How applications access the adapter | Start here |
+| --- | --- | --- |
+| Linux | GPIO chardev, I2C, SPI/spidev, and IIO ADC | [Quick start](#quick-start) below; [host setup details](HOST_SUPPORT.md) |
+| Windows 10/11 | Python client using WinUSB, with no third-party Python dependencies | [Windows guide](WINDOWS.md) |
 
-Windows 10/11 uses the same firmware with automatic inbox WinUSB binding via
-Microsoft OS 2.0 descriptors. A standard-library-only Python client provides
-GPIO/I2C/SPI/ADC operations. Existing devices need a firmware update first;
-see [Windows support](WINDOWS.md). The instructions below cover Linux.
+The firmware provides 10 GPIO lines, one I2C port, one SPI port with CS0,
+and four ADC channels. All external signals are **3.3 V**. This is lab
+firmware; read the [known issues](#known-issues) before connecting hardware.
 
 ## Quick Start
 
-The paths and TTY names below are examples. Replace `IDF_PATH` and the S3 flash
-port with the values on your host.
+1. Check the [requirements](#requirements), then [build and flash](#build-and-flash) the S3.
+2. Connect the **native USB** port and follow the [host setup](#one-time-host-setup) for your OS.
+3. Check the [pin map](#pin-map), then try the [usage examples](#usage-examples).
 
-```bash
+If the board already has the current firmware, start at host setup. An
+ESP32-C3 is only needed for the optional developer test fixture.
+
+## Requirements
+
+- WeAct ESP32S3-A or a compatible ESP32-S3 board matching the pin map below.
+- USB connections for the board's flash/log serial port and its native USB
+  device port. The serial port is for flashing; the native port exposes DLN-2.
+- Git and **ESP-IDF v5.5.4** to build the firmware. Other ESP-IDF v5.x releases
+  have not been validated for this project.
+
+For a Linux host:
+
+- Mainline drivers: `dln2`, `gpio-dln2`, `i2c-dln2`, `spi-dln2`, and `dln2-adc`.
+- Host support installer: `make`, a C compiler, headers for the running kernel,
+  `kmod`, `systemd`, and `udev`. Install `dkms` for automatic SPI helper rebuilds
+  after kernel upgrades.
+- Usage and test tools: Python 3, `libgpiod` command-line tools, and `i2c-tools`.
+  The GPIO commands below use libgpiod v2 syntax.
+
+For a Windows 10/11 host:
+
+- Python 3.10+; the client uses only the standard library and system WinUSB.
+- Current firmware for automatic WinUSB binding. Boards running older firmware
+  need the one-time update described in the [Windows guide](WINDOWS.md).
+
+## Build and Flash
+
+Get the source:
+
+```shell
 git clone https://github.com/Gdszzy/ESP_USB_DLN2.git
 cd ESP_USB_DLN2
+```
 
-export IDF_PATH=/path/to/esp-idf
-. "$IDF_PATH/export.sh"
+Run the commands for your platform. Replace the SDK path and example serial
+port with your actual values; these commands target the S3, not the C3 fixture.
+
+**Linux / Bash:**
+
+```bash
+. /path/to/esp-idf/export.sh
 idf.py set-target esp32s3
 idf.py build
 idf.py -p /dev/ttyACM1 flash
 ```
 
-After flashing, connect or replug the S3 native USB port, then install the
-Linux host support:
+**Windows / an ESP-IDF v5.5.4 PowerShell terminal:**
 
-```bash
-getent group plugdev || sudo groupadd -r plugdev
-sudo ./scripts/install_host_support.sh
-sudo usermod -aG plugdev "$USER"
-newgrp plugdev
-esp-usb-dln2-check
-```
-
-When `esp-usb-dln2-check` reports all `OK`, basic GPIO/I2C/SPI/ADC access from
-Linux is ready. No additional board is required for normal use.
-
-## Current Status
-
-Validated on the current development host:
-
-- USB enumeration with VID/PID `a257:2013`; Linux binds the mainline `dln2`
-  MFD driver automatically.
-- GPIO chardev through `gpio-dln2`, including line get/set and IRQ events.
-- I2C adapter through `i2c-dln2`, including raw read/write, two-message
-  `I2C_RDWR` register-style reads, common SMBus ioctl paths, and short error
-  recovery stress.
-- SPI master through `spi-dln2`, with a host-side helper that creates a lab
-  `spidev` child for userspace transfers.
-- ADC IIO device through `dln2-adc`, including raw reads, buffered reads, and
-  a 4-channel known-voltage electrical smoke test.
-- One-time host support install that makes GPIO/I2C/SPI/IIO usable by the
-  normal user on the current host.
-
-The project is still a lab/bring-up firmware, not a finished product. See
-`Known Issues` and `Notes and Safety` below before wiring external hardware.
-
-## Requirements
-
-Hardware:
-
-- WeAct ESP32S3-A or a compatible ESP32-S3 board with native USB wired to the
-  host.
-- One USB connection for flashing/logging and one native USB connection for the
-  DLN-2 emulated device.
-
-Software:
-
-- ESP-IDF v5.5.4 is the tested SDK version. Other ESP-IDF v5.x releases may
-  work, but are not the current validation target.
-- Linux with mainline DLN-2 drivers available: `dln2`, `gpio-dln2`,
-  `i2c-dln2`, `spi-dln2`, and `dln2-adc`.
-- Host build and device tools: `git`, Python 3, `make`, a C compiler, kernel
-  headers for the running kernel, `kmod`, `systemd`, and `udev`.
-- Recommended user tools: `libgpiod` command-line tools, `i2c-tools`, and
-  `dkms`.
-
-## Implemented Device Shape
-
-- USB 2.0 full-speed vendor interface.
-- Bulk OUT endpoint `0x01`, bulk IN endpoint `0x81`.
-- Manufacturer string `Diolan`, product string `DLN-2 USB GPIO`, serial
-  `12345678`.
-- DLN-2 packet parser with request framing over TinyUSB vendor endpoints.
-- DLN-2 control commands required by Linux MFD probing.
-- DLN-2 GPIO, I2C, SPI, and ADC command subsets used by the current Linux
-  drivers.
-- Shared event path for GPIO IRQ events and ADC triggered-buffer events.
-- ESP32-S3 physical pin ownership layer to avoid GPIO/I2C/SPI/ADC conflicts.
-
-## Pin Map
-
-Linux sees DLN-2 GPIO line offsets, not ESP32-S3 GPIO numbers.
-The GPIO pins below are ordered by Linux line offset: offset 0 is GPIO1,
-offset 1 is GPIO2, and so on.
-
-| Function | Linux name | ESP32-S3 pins |
-| --- | --- | --- |
-| GPIO lines | offsets 0-9 | GPIO1, GPIO2, GPIO4-GPIO9, GPIO18, GPIO21 |
-| I2C port 0 | `/dev/i2c-X`, `dln2-i2c-*` | SDA GPIO38, SCL GPIO47 |
-| SPI port 0 | `/sys/class/spi_master/spiX` | SCLK GPIO10, MOSI GPIO11, MISO GPIO12, CS0 GPIO13 |
-| ADC port 0 | `/dev/iio:deviceX`, `dln2-adc` | GPIO14-GPIO17 |
-| Native USB | DLN-2 USB device | GPIO19/GPIO20 |
-
-Reserved or excluded pins include ESP32-S3 strapping pins, native USB pins,
-UART0 flash/log pins, PSRAM pins, JTAG pins, and the onboard LED path. See
-`TECH_NOTES.md` for the full exclusion list.
-
-## Build and Flash
-
-ESP-IDF v5.5.4 is the tested environment:
-
-```bash
-. "$IDF_PATH/export.sh"
+```powershell
 idf.py set-target esp32s3
 idf.py build
-idf.py -p /dev/ttyACM1 flash monitor
+idf.py -p COM6 flash
 ```
 
-If `IDF_PATH` is not set, source the export script from your ESP-IDF checkout,
-for example `. /path/to/esp-idf/export.sh`. After flashing, unplug/replug the
-S3 native USB connection if Linux does not immediately bind the DLN-2 device.
+After flashing, connect or replug the S3 **native USB** port. To read firmware
+logs, run `idf.py -p <FLASH_PORT> monitor` with the same serial port.
 
 ## One-Time Host Setup
 
-Linux creates GPIO, I2C, SPI master, and IIO ADC child devices automatically.
-It does not create a generic `/dev/spidev*` node for a bare SPI controller, and
-default permissions are usually root-only. Install the host support package
-once:
+### Windows 10/11
+
+The updated firmware automatically binds to system WinUSB. From the project
+root, run:
+
+```powershell
+py scripts\dln2_windows.py devices
+py scripts\dln2_windows.py check
+```
+
+`check` reads identity and capabilities without driving pins. Expect hardware
+ID `0x00000200`, 10 GPIO lines, and four ADC channels. See the
+[Windows guide](WINDOWS.md) for I/O commands, Python usage, and driver checks.
+
+### Linux
+
+Linux binds the DLN-2 drivers automatically. Install host support once to set
+normal-user permissions and create the SPI `spidev` node:
 
 ```bash
 getent group plugdev || sudo groupadd -r plugdev
 sudo ./scripts/install_host_support.sh
-esp-usb-dln2-check
-```
-
-The installer provides:
-
-- udev permissions for DLN-2 GPIO, I2C, IIO, and spidev nodes.
-- a systemd oneshot that handles replug/re-enumeration.
-- a small host-side kernel helper that registers a temporary `spidev` child on
-  the DLN-2 SPI controller. When `dkms` is available, this helper is installed
-  as a DKMS package and can rebuild automatically after kernel upgrades.
-- `esp-usb-dln2-check`, a readiness diagnostic.
-- `esp-usb-dln2-uninstall`, a host support removal command.
-
-If you prefer an existing access group, pass it explicitly, for example
-`sudo ./scripts/install_host_support.sh --group i2c`. If your user is not in
-the chosen group, add it and start a new login shell:
-
-```bash
 sudo usermod -aG plugdev "$USER"
 newgrp plugdev
 esp-usb-dln2-check
 ```
 
-Expected ready output is all `OK`, including `IIO buffer sysfs is writable`.
-See `HOST_SUPPORT.md` for install details and troubleshooting.
+`newgrp` opens a shell with the new group membership. Ready output should be
+all `OK`, including `IIO buffer sysfs is writable`.
 
-You do not need to rerun the installer after every reboot. If a replug or
-reboot leaves `/dev/spidev*` missing, run
-`sudo systemctl start esp-usb-dln2-spi.service` and then
-`esp-usb-dln2-check`.
+Normal reboots and USB reconnections do not require reinstalling host support.
+For access-group options, DKMS, a missing `spidev` node, or removal, see
+[HOST_SUPPORT.md](HOST_SUPPORT.md).
+
+## Pin Map
+
+GPIO commands on both platforms use **DLN-2 line offsets**, not ESP32-S3
+GPIO numbers: line 0 is GPIO1, line 1 is GPIO2, and so on. ADC channels 0–3
+map to GPIO14–17 in the same order.
+
+| Function | Channel | ESP32-S3 pins |
+| --- | --- | --- |
+| GPIO | line offsets 0–9 | GPIO1, GPIO2, GPIO4–GPIO9, GPIO18, GPIO21 |
+| I2C | port 0 | SDA GPIO38, SCL GPIO47 |
+| SPI | port 0, CS0 | SCLK GPIO10, MOSI GPIO11, MISO GPIO12, CS GPIO13 |
+| ADC | channels 0–3 | GPIO14–GPIO17 |
+| Native USB | DLN-2 device | GPIO19/GPIO20 |
+
+Use a common ground and 3.3 V signals. Reserved pins include boot strapping,
+native USB, UART0, PSRAM, JTAG, and the onboard LED. See
+[TECH_NOTES.md](TECH_NOTES.md) for the exclusion list and
+[Notes and safety](#notes-and-safety) before wiring.
 
 ## Usage Examples
+
+The commands below are for **Linux**. For Windows I/O commands, see the
+[Windows guide](WINDOWS.md#使用). Run output commands only after checking the wiring.
 
 Find the GPIO chip:
 
@@ -198,7 +164,8 @@ for d in /sys/class/i2c-dev/i2c-*; do
 done
 ```
 
-Scan the DLN-2 I2C bus with read-byte probing:
+Replace `<BUS_NUMBER>` with the bus whose name starts with `dln2-i2c-`,
+then scan it with read-byte probing:
 
 ```bash
 i2cdetect -r -y <BUS_NUMBER>
@@ -214,14 +181,65 @@ ls -l /dev/spidev*
 Read ADC raw values:
 
 ```bash
-cat /sys/bus/iio/devices/iio:device*/name
-cat /sys/bus/iio/devices/iio:device*/in_voltage0_raw
-./scripts/iio_adc_smoke_test.py --channels "0 1 2 3"
+./scripts/iio_adc_smoke_test.py --channels "0 1 2 3" --skip-buffer
 ```
 
-## Basic Smoke Test
+## Application Examples
 
-After host support is installed, these checks do not require extra hardware:
+The optional [OLED dashboard](examples/oled_flash_button_dashboard/README.md)
+uses an SSD1306 display, W25Q-style SPI flash, AHT20/BMP280-class sensors, and
+four buttons. It uses the adapter's Linux GPIO/I2C/SPI interfaces. Wiring and
+run commands are in the example README.
+
+## Current Status
+
+The Linux column summarizes earlier hardware validation. The Windows column
+covers the WinUSB adaptation validated on 2026-10-19.
+
+| Function | Linux validation | Windows validation |
+| --- | --- | --- |
+| USB | Automatic `dln2` binding | Automatic system WinUSB binding, identity reads, and re-enumeration |
+| GPIO | Read/write and IRQ events | Input reads, output latch/direction, and release; no voltage measurement |
+| I2C | Raw transfers, two-message `I2C_RDWR`, SMBus paths, and error recovery | AHT20 + BMP280 measurements with AHT20 CRC checks, plus NACK recovery |
+| SPI | SPI master and host-created `spidev` access | Modes 0–3 and transfer boundaries; no attached slave data verification |
+| ADC | Raw and buffered reads, four-channel known-voltage smoke | Raw range checks and asynchronous events; no accuracy calibration |
+
+Windows and Ubuntu WSL each pass 24 host protocol tests. **Linux USB binding
+has not been rerun on hardware after adding the WinUSB descriptors.** WSL
+protocol tests do not exercise Linux device drivers. See the detailed
+[Windows validation record](WINDOWS.md#本次验证记录2026-10-19).
+
+## Development
+
+### Where to change code
+
+| Path | Responsibility |
+| --- | --- |
+| [main/](main/) | USB descriptors, request framing, and event transmission |
+| [components/dln2/](components/dln2/) | DLN-2 commands, GPIO/I2C/SPI/ADC implementations, and pin ownership |
+| [scripts/dln2_windows.py](scripts/dln2_windows.py) | Windows discovery, WinUSB transport, Python API, and CLI |
+| [host_support/](host_support/) / [tools/spi_test_device/](tools/spi_test_device/) | Linux permissions, plug-in setup, and SPI child registration |
+| [tests/](tests/) | Host protocol tests, compiled USB descriptor checks, and Windows hardware smoke |
+| [c3_test/](c3_test/) | Optional ESP32-C3 GPIO/I2C/SPI closed-loop fixture |
+
+The device uses one full-speed vendor interface, bulk OUT `0x01` and IN
+`0x81`, VID/PID `a257:2013`, and serial `12345678`. GPIO IRQ and ADC events
+share the USB event path. Protocol details and implementation decisions are in
+[TECH_NOTES.md](TECH_NOTES.md).
+
+### Tests without hardware
+
+Run from the project root:
+
+```bash
+python3 -B -m unittest discover -s tests -v
+```
+
+On Windows, use `py -B -m unittest discover -s tests -v`.
+
+### Basic Smoke Test
+
+On Linux, after host setup, these checks need no external peripherals:
 
 ```bash
 esp-usb-dln2-check
@@ -229,22 +247,15 @@ gpioinfo -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00
 ./scripts/iio_adc_smoke_test.py --channels "0 1 2 3"
 ```
 
-If GPIO lines are not connected to external hardware, you can also drive a line
-briefly:
+They check device access, GPIO metadata, and raw/buffered ADC paths, not
+measurement accuracy. I2C/SPI transfers and GPIO IRQ checks need external
+hardware.
 
-```bash
-gpioset -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -t 100ms,0 0=1
-```
-
-I2C and SPI transfer testing requires the user to connect an actual I2C/SPI
-target device to the S3 pins listed in the pin map.
-
-## Application Examples
-
-Optional application-level demos live under `examples/`. The
-`examples/oled_flash_button_dashboard/` demo uses a SSD1306 OLED, W25Q-style
-SPI flash, and four buttons to exercise GPIO, I2C, and SPI through the normal
-Linux interfaces exposed by the S3 adapter.
+For compiled descriptor checks and the Windows hardware smoke, follow
+[Windows development checks](WINDOWS.md#开发检查); the smoke drives GPIO and
+requires a bare board. For the Linux full regression, wire the
+[C3 fixture](c3_test/README.md) before running
+[scripts/full_regression.sh](scripts/full_regression.sh).
 
 ## Notes and Safety
 
@@ -267,27 +278,23 @@ Linux interfaces exposed by the S3 adapter.
 
 ## Known Issues
 
-- SPI userspace access still needs the host support package because Linux does
-  not create `spidev` for a bare SPI controller.
-- The host-side SPI child registrar is still a lab helper kernel module. DKMS
-  covers normal kernel upgrades when available; systems installed with
-  `--dkms no` need the installer rerun after a kernel upgrade.
-- I2C `I2C_RDWR` validation covers Linux's current `i2c-dln2` behavior, which
-  sends one DLN-2 transfer per `i2c_msg`. Devices requiring a strict repeated
-  START need separate scrutiny.
-- ADC electrical smoke has been validated on all 4 channels with known input
-  voltages. Absolute accuracy and calibration are not validated.
+- Linux `spidev` access uses an experimental host-side helper module. DKMS
+  handles normal kernel upgrades; `--dkms no` installs need the installer
+  rerun after an upgrade. See [host support](HOST_SUPPORT.md).
+- I2C writes and reads are separate transfers. Linux `i2c-dln2` sends one DLN-2
+  transfer per `i2c_msg`; the Windows client also uses separate write/read
+  operations. Devices requiring repeated START need separate validation.
+- Absolute ADC accuracy and calibration are not validated.
 - Long-duration GPIO IRQ, I2C, SPI, and ADC endurance tests are still pending.
-- The no-extra-hardware smoke test verifies enumeration, permissions, GPIO
-  metadata, and ADC IIO paths. I2C/SPI electrical transfers and GPIO IRQs need
-  external target hardware to validate end-to-end.
-- Only one I2C port, one SPI port with one chip select, and one 4-channel ADC
-  port are implemented.
-- Unsupported DLN-2 commands intentionally return explicit errors.
+- Only the DLN-2 command subset used by these host tools is implemented.
+  Unsupported commands return explicit errors.
 
 ## Feedback Data
 
-When sharing test results or reporting a failure, include:
+For a Windows report, include the Windows/Python versions and the output of
+`py scripts\dln2_windows.py devices` and `py scripts\dln2_windows.py check`.
+
+On Linux, include:
 
 ```bash
 uname -a
@@ -297,24 +304,19 @@ journalctl -u esp-usb-dln2-spi.service -n 80 --no-pager
 dmesg | grep -iE 'dln2|a257|spidev|iio'
 ```
 
+## Documentation Map
+
+- [WINDOWS.md](WINDOWS.md): Windows setup, CLI/Python usage, driver checks, and validation.
+- [HOST_SUPPORT.md](HOST_SUPPORT.md): Linux installation, udev/systemd, and the SPI helper.
+- [TECH_NOTES.md](TECH_NOTES.md): protocol details, pin decisions, and bring-up findings.
+- [OLED dashboard](examples/oled_flash_button_dashboard/README.md): Linux application and wiring example.
+- [C3 test fixture](c3_test/README.md): optional closed-loop hardware regression.
+- [PROGRESS.md](PROGRESS.md): historical milestones; use the guides above for current setup.
+
 ## License
 
 The main firmware, host scripts, and documentation are licensed under the
-Apache License 2.0. See `LICENSE`.
+Apache License 2.0. See [LICENSE](LICENSE).
 
 The Linux kernel helper in `tools/spi_test_device/` is a Linux kernel module
 and remains licensed under GPL-2.0 as declared by its SPDX header.
-
-## Documentation Map
-
-- `README.md` / `README.zh-CN.md`: normal user entry points for flashing,
-  host setup, feature status, pin map, usage, safety, and known issues.
-- `HOST_SUPPORT.md`: host install, udev/systemd, and SPI spidev helper details.
-- `examples/`: optional application examples built on top of the normal Linux
-  device interfaces.
-- `TECH_NOTES.md`: protocol notes, pin decisions, verification notes, and
-  pitfalls found during bring-up. This is mostly for developers.
-- `PROGRESS.md`: chronological milestone log. This is historical and not
-  required for normal use.
-- `c3_test/README.md`: developer-only ESP32-C3 closed-loop fixture notes; not
-  needed for normal S3 adapter use.

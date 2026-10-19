@@ -2,169 +2,132 @@
 
 [English](README.md) | 简体中文
 
-ESP USB DLN2 可以把 ESP32-S3 开发板模拟成一个 Linux 兼容的 DLN-2 风格
-USB I/O 适配器。刷入固件并安装可选的主机支持包后，Linux 可以直接通过主线
-内核已有驱动使用这块 S3，不需要额外编写专用 Linux 主机驱动。
+ESP USB DLN2 把 ESP32-S3 开发板变成 USB GPIO/I2C/SPI/ADC 适配器。
+同一份固件在 Linux 上使用主线 DLN-2 驱动，在 Windows 10/11 上使用系统
+WinUSB 和 Python 客户端。当前目标开发板是 **WeAct ESP32S3-A**。
 
-当前目标开发板：WeAct ESP32S3-A。当前 Linux 兼容目标：主线内核中的
-`dln2`、`gpio-dln2`、`i2c-dln2`、`spi-dln2` 和 `dln2-adc`。
+| 主机平台 | 应用访问方式 | 从哪里开始 |
+| --- | --- | --- |
+| Linux | GPIO chardev、I2C、SPI/spidev、IIO ADC | 下方[快速开始](#快速开始)；[主机安装细节](HOST_SUPPORT.md) |
+| Windows 10/11 | 通过 WinUSB 使用 Python 客户端，无第三方 Python 依赖 | [Windows 使用说明](WINDOWS.md) |
 
-Windows 10/11 使用同一固件，通过 Microsoft OS 2.0 描述符自动绑定系统
-WinUSB，配套提供无需第三方 Python 依赖的 GPIO/I2C/SPI/ADC 工具。首次需要
-更新固件，详见 [Windows 使用说明](WINDOWS.md)。下文为 Linux 使用流程。
+固件提供 10 路 GPIO、1 路 I2C、1 路带 CS0 的 SPI 和 4 路 ADC。
+所有外部信号均为 **3.3 V**。项目仍处于实验验证阶段，接线前请阅读[已知问题](#已知问题)。
 
 ## 快速开始
 
-下面的路径和 TTY 名称只是示例。请把 `IDF_PATH` 和 S3 烧录串口替换成你
-自己机器上的实际值。
+1. 确认[前置条件](#前置条件)，然后[构建和烧录](#构建和烧录) S3 固件。
+2. 连接 **native USB** 口，按自己的操作系统完成[主机一次性安装](#主机一次性安装)。
+3. 查看[引脚映射](#引脚映射)，再运行[使用示例](#使用示例)。
 
-```bash
+已刷入当前固件的开发板可以直接从主机安装开始。ESP32-C3 只用于可选的开发者测试夹具。
+
+## 前置条件
+
+- WeAct ESP32S3-A，或与下方引脚映射一致的兼容 ESP32-S3 开发板。
+- 用于开发板烧录/日志串口和 native USB 设备口的 USB 连接。串口用于烧录，
+  native USB 口提供 DLN-2 设备。
+- 用于构建固件的 Git 和 **ESP-IDF v5.5.4**。其它 ESP-IDF v5.x 版本尚未在本项目验证。
+
+Linux 主机还需要：
+
+- 主线驱动：`dln2`、`gpio-dln2`、`i2c-dln2`、`spi-dln2`、`dln2-adc`。
+- host support 安装工具：`make`、C 编译器、当前内核的 headers、`kmod`、
+  `systemd` 和 `udev`。安装 `dkms` 可让 SPI helper 在内核升级后自动重建。
+- 使用和测试工具：Python 3、`libgpiod` 命令行工具、`i2c-tools`。
+  下方 GPIO 命令采用 libgpiod v2 语法。
+
+Windows 10/11 主机还需要：
+
+- Python 3.10+；客户端只使用标准库和系统 WinUSB。
+- 支持 WinUSB 自动绑定的当前固件。旧固件需要先更新一次，见 [Windows 使用说明](WINDOWS.md)。
+
+## 构建和烧录
+
+获取源码：
+
+```shell
 git clone https://github.com/Gdszzy/ESP_USB_DLN2.git
 cd ESP_USB_DLN2
+```
 
-export IDF_PATH=/path/to/esp-idf
-. "$IDF_PATH/export.sh"
+按自己的平台选择下面一组命令。请替换 SDK 路径和示例串口；这里烧录的是 S3，
+不是 C3 测试夹具。
+
+**Linux / Bash：**
+
+```bash
+. /path/to/esp-idf/export.sh
 idf.py set-target esp32s3
 idf.py build
 idf.py -p /dev/ttyACM1 flash
 ```
 
-刷入后，连接或重新插拔 S3 native USB，然后安装 Linux host support：
+**Windows / 已配置 ESP-IDF v5.5.4 的 PowerShell：**
 
-```bash
-getent group plugdev || sudo groupadd -r plugdev
-sudo ./scripts/install_host_support.sh
-sudo usermod -aG plugdev "$USER"
-newgrp plugdev
-esp-usb-dln2-check
-```
-
-当 `esp-usb-dln2-check` 全部显示 `OK` 时，Linux 侧 GPIO/I2C/SPI/ADC
-基础访问已经可用。日常使用不需要额外的开发板。
-
-## 当前状态
-
-已在当前开发主机验证：
-
-- USB 以 VID/PID `a257:2013` 枚举，Linux 会自动绑定主线 `dln2` MFD
-  驱动。
-- GPIO 通过 `gpio-dln2` 暴露为 GPIO chardev，已验证读写和 IRQ 事件。
-- I2C 通过 `i2c-dln2` 暴露为 Linux I2C adapter，已验证 raw read/write、
-  两消息 `I2C_RDWR` 寄存器式读取、常见 SMBus ioctl 路径，以及短周期错误
-  恢复压力测试。
-- SPI 通过 `spi-dln2` 暴露为 Linux SPI master，并通过主机侧 helper 创建
-  实验用 `spidev` 子设备以支持用户态传输。
-- ADC 通过 `dln2-adc` 暴露为 IIO 设备，已验证 raw read、buffered read
-  和 4 通道已知电压电气冒烟测试。
-- 一次性 host support 安装后，当前主机上的普通用户可以直接访问
-  GPIO/I2C/SPI/IIO。
-
-这个项目仍处于实验室 bring-up 阶段，不是完成品。接外部硬件前请先阅读
-`已知问题` 和 `注意事项`。
-
-## 前置条件
-
-硬件：
-
-- WeAct ESP32S3-A，或 native USB 已接到主机的兼容 ESP32-S3 开发板。
-- 一路 USB 用于烧录/日志，另一路 native USB 用于 DLN-2 模拟设备。
-
-软件：
-
-- ESP-IDF v5.5.4 是当前验证过的 SDK 版本。其它 ESP-IDF v5.x 版本可能可用，
-  但不是当前验证目标。
-- Linux 需要有主线 DLN-2 驱动：`dln2`、`gpio-dln2`、`i2c-dln2`、
-  `spi-dln2` 和 `dln2-adc`。
-- 主机构建和设备工具：`git`、Python 3、`make`、C 编译器、当前内核对应的
-  kernel headers、`kmod`、`systemd` 和 `udev`。
-- 推荐用户态工具：`libgpiod` 命令行工具、`i2c-tools` 和 `dkms`。
-
-## 已实现的设备形态
-
-- USB 2.0 full-speed vendor interface。
-- Bulk OUT endpoint `0x01`，bulk IN endpoint `0x81`。
-- Manufacturer string `Diolan`，product string `DLN-2 USB GPIO`，serial
-  `12345678`。
-- 基于 TinyUSB vendor endpoint 的 DLN-2 请求分帧和协议解析。
-- Linux MFD 探测所需的 DLN-2 control 命令。
-- 当前 Linux 驱动实际使用的 DLN-2 GPIO、I2C、SPI、ADC 命令子集。
-- GPIO IRQ 事件和 ADC triggered-buffer 事件共用的 USB event 路径。
-- ESP32-S3 物理引脚 ownership 层，用于避免 GPIO/I2C/SPI/ADC 互相抢占
-  引脚。
-
-## 引脚映射
-
-Linux 看到的是 DLN-2 GPIO line offset，不是 ESP32-S3 GPIO 编号。
-下表中的 GPIO 引脚按 Linux line offset 顺序排列：offset 0 是 GPIO1，
-offset 1 是 GPIO2，后面依此类推。
-
-| 功能 | Linux 名称 | ESP32-S3 引脚 |
-| --- | --- | --- |
-| GPIO lines | offsets 0-9 | GPIO1, GPIO2, GPIO4-GPIO9, GPIO18, GPIO21 |
-| I2C port 0 | `/dev/i2c-X`, `dln2-i2c-*` | SDA GPIO38, SCL GPIO47 |
-| SPI port 0 | `/sys/class/spi_master/spiX` | SCLK GPIO10, MOSI GPIO11, MISO GPIO12, CS0 GPIO13 |
-| ADC port 0 | `/dev/iio:deviceX`, `dln2-adc` | GPIO14-GPIO17 |
-| Native USB | DLN-2 USB device | GPIO19/GPIO20 |
-
-保留或排除的引脚包括 ESP32-S3 strapping pins、native USB 引脚、UART0
-烧录/日志引脚、PSRAM 引脚、JTAG 引脚和板载 LED 路径。完整排除列表见
-`TECH_NOTES.md`。
-
-## 构建和烧录
-
-已验证环境为 ESP-IDF v5.5.4：
-
-```bash
-. "$IDF_PATH/export.sh"
+```powershell
 idf.py set-target esp32s3
 idf.py build
-idf.py -p /dev/ttyACM1 flash monitor
+idf.py -p COM6 flash
 ```
 
-如果没有设置 `IDF_PATH`，请 source 你自己的 ESP-IDF checkout，例如
-`. /path/to/esp-idf/export.sh`。刷入后，如果 Linux 没有立即绑定 DLN-2
-设备，可以重新插拔 S3 native USB。
+刷入后，连接或重新插拔 S3 的 **native USB** 口。需要查看固件日志时，使用同一
+烧录串口运行 `idf.py -p <FLASH_PORT> monitor`。
 
 ## 主机一次性安装
 
-Linux 会自动创建 GPIO、I2C、SPI master 和 IIO ADC 子设备。但 Linux 不会为
-一个裸 SPI controller 自动创建通用 `/dev/spidev*` 节点，而且默认权限通常
-只允许 root 使用。安装一次 host support：
+### Windows 10/11
+
+新固件会自动绑定系统 WinUSB。在项目根目录运行：
+
+```powershell
+py scripts\dln2_windows.py devices
+py scripts\dln2_windows.py check
+```
+
+`check` 只读取身份和接口能力，不驱动引脚。预期硬件 ID 为 `0x00000200`，
+GPIO 为 10 路，ADC 为 4 路。I/O 命令、Python 调用和驱动检查见 [Windows 使用说明](WINDOWS.md)。
+
+### Linux
+
+Linux 会自动绑定 DLN-2 驱动。首次安装 host support，用于配置普通用户权限并创建
+SPI 的 `spidev` 节点：
 
 ```bash
 getent group plugdev || sudo groupadd -r plugdev
 sudo ./scripts/install_host_support.sh
-esp-usb-dln2-check
-```
-
-安装脚本会提供：
-
-- DLN-2 GPIO、I2C、IIO 和 spidev 节点的 udev 权限规则。
-- 处理 replug/re-enumeration 的 systemd oneshot。
-- 一个小型主机侧 kernel helper，用于在 DLN-2 SPI controller 上注册临时
-  `spidev` 子设备。当系统安装了 `dkms` 时，这个 helper 会作为 DKMS 包安装，
-  内核升级后可以自动重建。
-- `esp-usb-dln2-check` 就绪诊断命令。
-- `esp-usb-dln2-uninstall` host support 卸载命令。
-
-如果你想使用已有权限组，可以显式指定，例如
-`sudo ./scripts/install_host_support.sh --group i2c`。如果当前用户不在选定
-权限组里，加入该组并启动新的登录 shell：
-
-```bash
 sudo usermod -aG plugdev "$USER"
 newgrp plugdev
 esp-usb-dln2-check
 ```
 
-理想输出应全部为 `OK`，包括 `IIO buffer sysfs is writable`。安装细节和
-排错见 `HOST_SUPPORT.md`。
+`newgrp` 会打开已取得新组权限的 shell。就绪检查应全部为 `OK`，包括
+`IIO buffer sysfs is writable`。
 
-重启后不需要重复运行安装脚本。如果重新插拔或重启后 `/dev/spidev*` 没有出现，
-先运行 `sudo systemctl start esp-usb-dln2-spi.service`，再运行
-`esp-usb-dln2-check` 检查状态。
+正常重启和重新插拔 USB 不需要重复安装。权限组选择、DKMS、`spidev` 节点缺失
+和卸载方法见 [HOST_SUPPORT.md](HOST_SUPPORT.md)。
+
+## 引脚映射
+
+两个平台的 GPIO 命令都使用 **DLN-2 line offset**，不是 ESP32-S3 GPIO 编号：
+line 0 对应 GPIO1，line 1 对应 GPIO2，依此类推。ADC channel 0–3 按顺序对应 GPIO14–17。
+
+| 功能 | 通道 | ESP32-S3 引脚 |
+| --- | --- | --- |
+| GPIO | line offset 0–9 | GPIO1, GPIO2, GPIO4–GPIO9, GPIO18, GPIO21 |
+| I2C | port 0 | SDA GPIO38, SCL GPIO47 |
+| SPI | port 0、CS0 | SCLK GPIO10, MOSI GPIO11, MISO GPIO12, CS GPIO13 |
+| ADC | channel 0–3 | GPIO14–GPIO17 |
+| Native USB | DLN-2 设备 | GPIO19/GPIO20 |
+
+外设需要共地，信号电平为 3.3 V。启动绑带、native USB、UART0、PSRAM、JTAG
+和板载 LED 所用引脚已保留或排除。完整列表见 [TECH_NOTES.md](TECH_NOTES.md)，
+接线前请阅读[注意事项](#注意事项)。
 
 ## 使用示例
+
+下列命令用于 **Linux**；Windows 的 I/O 命令见 [Windows 使用说明](WINDOWS.md#使用)。
+执行输出命令前，请确认接线。
 
 查找 GPIO chip：
 
@@ -190,7 +153,8 @@ for d in /sys/class/i2c-dev/i2c-*; do
 done
 ```
 
-使用 read-byte probing 扫描 DLN-2 I2C 总线：
+将 `<BUS_NUMBER>` 替换为名称以 `dln2-i2c-` 开头的总线编号，
+然后使用 read-byte probing 扫描：
 
 ```bash
 i2cdetect -r -y <BUS_NUMBER>
@@ -206,14 +170,61 @@ ls -l /dev/spidev*
 读取 ADC raw 值：
 
 ```bash
-cat /sys/bus/iio/devices/iio:device*/name
-cat /sys/bus/iio/devices/iio:device*/in_voltage0_raw
-./scripts/iio_adc_smoke_test.py --channels "0 1 2 3"
+./scripts/iio_adc_smoke_test.py --channels "0 1 2 3" --skip-buffer
 ```
 
-## 基础冒烟测试
+## 应用示例
 
-安装 host support 后，下面这些检查不需要额外硬件：
+可选的 [OLED 仪表盘](examples/oled_flash_button_dashboard/README.md)使用 SSD1306
+屏幕、W25Q 类 SPI Flash、AHT20/BMP280 类传感器和 4 个按钮，通过适配器的
+Linux GPIO/I2C/SPI 接口工作。接线和运行方式见示例 README。
+
+## 当前状态
+
+Linux 一栏汇总此前的实机验证；Windows 一栏对应 2026-10-19 完成的 WinUSB 适配验证。
+
+| 功能 | Linux 验证 | Windows 验证 |
+| --- | --- | --- |
+| USB | 自动绑定 `dln2` | 自动绑定系统 WinUSB、身份读取、重新枚举 |
+| GPIO | 读写和 IRQ 事件 | 输入读取、输出锁存/方向、释放；未测输出电压 |
+| I2C | raw 传输、两消息 `I2C_RDWR`、SMBus 路径、错误恢复 | AHT20 + BMP280 读数、AHT20 CRC 校验、NACK 恢复 |
+| SPI | SPI master 和主机创建的 `spidev` 访问 | mode 0–3 和传输边界；未验证实际从设备数据 |
+| ADC | raw/buffered 读取、4 通道已知电压冒烟测试 | raw 范围和异步事件；未校准精度 |
+
+Windows 和 Ubuntu WSL 各通过 24 项主机协议测试。**加入 WinUSB 描述符后，尚未
+重新做 Linux 实机 USB 绑定回归。** WSL 协议测试不覆盖 Linux 设备驱动。
+详细结果见 [Windows 验证记录](WINDOWS.md#本次验证记录2026-10-19)。
+
+## 开发指南
+
+### 从哪里改代码
+
+| 路径 | 职责 |
+| --- | --- |
+| [main/](main/) | USB 描述符、请求分帧、事件发送 |
+| [components/dln2/](components/dln2/) | DLN-2 命令、GPIO/I2C/SPI/ADC 实现、引脚占用管理 |
+| [scripts/dln2_windows.py](scripts/dln2_windows.py) | Windows 发现设备、WinUSB 传输、Python API、CLI |
+| [host_support/](host_support/) / [tools/spi_test_device/](tools/spi_test_device/) | Linux 权限、插拔处理、SPI 子设备注册 |
+| [tests/](tests/) | 主机协议测试、编译产物 USB 描述符检查、Windows 实机冒烟测试 |
+| [c3_test/](c3_test/) | 可选的 ESP32-C3 GPIO/I2C/SPI 闭环夹具 |
+
+USB 使用单个全速 vendor interface、Bulk OUT `0x01` / IN `0x81`、VID/PID
+`a257:2013` 和序列号 `12345678`。GPIO IRQ 与 ADC 事件共用 USB 事件通道。
+协议和实现决策见 [TECH_NOTES.md](TECH_NOTES.md)。
+
+### 无硬件测试
+
+在项目根目录运行：
+
+```bash
+python3 -B -m unittest discover -s tests -v
+```
+
+Windows 使用 `py -B -m unittest discover -s tests -v`。
+
+### 基础冒烟测试
+
+Linux 安装 host support 后，以下检查不需要连接外设：
 
 ```bash
 esp-usb-dln2-check
@@ -221,21 +232,13 @@ gpioinfo -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00
 ./scripts/iio_adc_smoke_test.py --channels "0 1 2 3"
 ```
 
-如果 GPIO line 没有连接外部硬件，也可以短暂驱动一个 line：
+这些命令检查设备访问、GPIO 元数据和 ADC raw/buffered 路径，不验证测量精度。
+I2C/SPI 传输和 GPIO IRQ 检查需要外部硬件。
 
-```bash
-gpioset -c /dev/gpio/by-id/usb-Diolan_DLN-2_USB_GPIO_12345678-if00 -t 100ms,0 0=1
-```
-
-I2C 和 SPI 的传输测试需要用户把实际 I2C/SPI 目标设备接到引脚映射表里的
-S3 引脚上。
-
-## 应用示例
-
-可选的应用层 demo 放在 `examples/` 目录下。
-`examples/oled_flash_button_dashboard/` 示例使用 SSD1306 OLED、W25Q 类
-SPI Flash 和 4 个按钮，通过 S3 适配器暴露出的普通 Linux GPIO/I2C/SPI
-接口做一个可视化仪表盘。
+编译产物描述符检查及 Windows 实机冒烟测试见 [Windows 开发检查](WINDOWS.md#开发检查)；
+其中实机冒烟测试会驱动 GPIO，必须使用无外部接线的裸板。Linux 完整回归需要先按
+[C3 测试夹具说明](c3_test/README.zh-CN.md)接线，再运行
+[scripts/full_regression.sh](scripts/full_regression.sh)。
 
 ## 注意事项
 
@@ -255,26 +258,20 @@ SPI Flash 和 4 个按钮，通过 S3 适配器暴露出的普通 Linux GPIO/I2C
 
 ## 已知问题
 
-- SPI 用户态访问仍需要 host support 包，因为 Linux 不会为裸 SPI controller
-  自动创建 `spidev`。
-- 主机侧 SPI child registrar 仍是实验室 helper kernel module。有 DKMS 时
-  可以覆盖常规内核升级；如果用 `--dkms no` 安装，升级内核后需要重新运行
-  安装脚本。
-- 当前 `I2C_RDWR` 验证覆盖的是 Linux `i2c-dln2` 的现有行为：它对每个
-  `i2c_msg` 发送一个 DLN-2 transfer。严格要求 repeated START 的设备需要
-  单独评估。
-- ADC 4 个通道都已用已知输入电压完成电气冒烟测试。绝对精度和校准尚未
-  验证。
+- Linux `spidev` 访问依赖实验性的主机 helper 内核模块。DKMS 可处理常规内核
+  升级；用 `--dkms no` 安装时，升级后需要重新运行安装脚本，见[主机安装说明](HOST_SUPPORT.md)。
+- I2C 写和读是独立事务。Linux `i2c-dln2` 对每个 `i2c_msg` 发送一个 DLN-2
+  transfer，Windows 客户端也分别执行写和读。要求 repeated START 的设备需要单独验证。
+- ADC 绝对精度和校准尚未验证。
 - GPIO IRQ、I2C、SPI、ADC 的长时间耐久测试仍待补充。
-- 无额外硬件的冒烟测试会验证枚举、权限、GPIO 元数据和 ADC IIO 路径。
-  I2C/SPI 电气传输和 GPIO IRQ 需要外部目标硬件才能做端到端验证。
-- 当前只实现了一个 I2C port、一个带单个 chip select 的 SPI port，以及一个
-  4 通道 ADC port。
-- 未实现的 DLN-2 命令会明确返回错误，这是当前预期行为。
+- 当前仅实现这些主机工具使用的 DLN-2 命令子集；未实现的命令会明确返回错误。
 
 ## 反馈信息
 
-如果要分享测试结果或反馈失败，请附上：
+Windows 反馈请附系统/Python 版本，以及 `py scripts\dln2_windows.py devices`
+和 `py scripts\dln2_windows.py check` 的输出。
+
+Linux 反馈请附：
 
 ```bash
 uname -a
@@ -284,21 +281,18 @@ journalctl -u esp-usb-dln2-spi.service -n 80 --no-pager
 dmesg | grep -iE 'dln2|a257|spidev|iio'
 ```
 
+## 文档索引
+
+- [WINDOWS.md](WINDOWS.md)：Windows 安装、CLI/Python 使用、驱动检查和验证记录。
+- [HOST_SUPPORT.md](HOST_SUPPORT.md)：Linux 安装、udev/systemd 和 SPI helper。
+- [TECH_NOTES.md](TECH_NOTES.md)：协议细节、引脚决策和开发中遇到的问题。
+- [OLED 仪表盘](examples/oled_flash_button_dashboard/README.md)：Linux 应用与接线示例。
+- [C3 测试夹具](c3_test/README.zh-CN.md)：可选的硬件闭环回归。
+- [PROGRESS.md](PROGRESS.md)：历史里程碑；当前使用方法以上述指南为准。
+
 ## 许可证
 
-主固件、host 脚本和文档使用 Apache License 2.0。详见 `LICENSE`。
+主固件、host 脚本和文档使用 Apache License 2.0。详见 [LICENSE](LICENSE)。
 
 `tools/spi_test_device/` 下的 Linux kernel helper 是 Linux 内核模块，按其
 SPDX 头声明继续使用 GPL-2.0。
-
-## 文档索引
-
-- `README.md` / `README.zh-CN.md`：普通用户入口，覆盖烧录、host setup、
-  功能状态、引脚映射、使用示例、安全注意事项和已知问题。
-- `HOST_SUPPORT.md`：host 安装、udev/systemd 和 SPI spidev helper 细节。
-- `examples/`：基于普通 Linux 设备接口的可选应用示例。
-- `TECH_NOTES.md`：协议细节、引脚决策、验证记录和 bring-up 过程中遇到的坑。
-  主要面向开发者。
-- `PROGRESS.md`：按时间记录的里程碑，属于历史记录，日常使用不需要阅读。
-- `c3_test/README.zh-CN.md`：开发者专用 ESP32-C3 闭环测试夹具说明；日常使用
-  S3 适配器不需要。
