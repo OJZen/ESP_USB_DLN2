@@ -9,6 +9,10 @@ USB I/O 适配器。刷入固件并安装可选的主机支持包后，Linux 可
 当前目标开发板：WeAct ESP32S3-A。当前 Linux 兼容目标：主线内核中的
 `dln2`、`gpio-dln2`、`i2c-dln2`、`spi-dln2` 和 `dln2-adc`。
 
+Windows 10/11 使用同一固件，通过 Microsoft OS 2.0 描述符自动绑定系统
+WinUSB，配套提供无需第三方 Python 依赖的 GPIO/I2C/SPI/ADC 工具。首次需要
+更新固件，详见 [Windows 使用说明](WINDOWS.md)。下文为 Linux 使用流程。
+
 ## 快速开始
 
 下面的路径和 TTY 名称只是示例。请把 `IDF_PATH` 和 S3 烧录串口替换成你

@@ -10,6 +10,11 @@ of a custom host driver.
 Current target board: WeAct ESP32S3-A. Current Linux compatibility target:
 mainline `dln2`, `gpio-dln2`, `i2c-dln2`, `spi-dln2`, and `dln2-adc`.
 
+Windows 10/11 uses the same firmware with automatic inbox WinUSB binding via
+Microsoft OS 2.0 descriptors. A standard-library-only Python client provides
+GPIO/I2C/SPI/ADC operations. Existing devices need a firmware update first;
+see [Windows support](WINDOWS.md). The instructions below cover Linux.
+
 ## Quick Start
 
 The paths and TTY names below are examples. Replace `IDF_PATH` and the S3 flash

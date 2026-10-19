@@ -1,5 +1,8 @@
 # Host Support
 
+For native Windows 10/11 support, see [WINDOWS.md](WINDOWS.md). This document
+covers Linux setup.
+
 The ESP32-S3 firmware enumerates as a DLN-2 compatible USB multifunction
 device. Linux automatically creates GPIO, I2C, SPI master, and IIO ADC child
 devices, but a generic SPI userspace node needs one host-side step because

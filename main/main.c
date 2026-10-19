@@ -173,15 +173,6 @@ void tud_vendor_rx_cb(uint8_t itf, uint8_t const *buffer, uint16_t bufsize)
     }
 }
 
-bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage,
-                                tusb_control_request_t const *request)
-{
-    (void)rhport;
-    (void)request;
-
-    return stage != CONTROL_STAGE_SETUP;
-}
-
 void app_main(void)
 {
     ESP_LOGI(TAG, "starting ESP32-S3 DLN-2 USB GPIO device");
@@ -204,5 +195,5 @@ void app_main(void)
 
     xTaskCreate(dln2_event_task, "dln2_event", 4096, NULL, 5, NULL);
 
-    ESP_LOGI(TAG, "TinyUSB installed; waiting for Linux dln2 driver");
+    ESP_LOGI(TAG, "TinyUSB installed; waiting for DLN-2 host");
 }
